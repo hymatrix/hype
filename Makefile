@@ -1,5 +1,5 @@
 BINARY := hype
-BUILD_DIR := bin
+BUILD_DIR := build
 CMD := ./cmd/hype
 GO := go
 

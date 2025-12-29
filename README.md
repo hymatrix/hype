@@ -4,9 +4,9 @@
 ## Build
 - Use `make`:
   - `make build`
-  - Output binary: `bin/hype`
+  - Output binary: `build/hype`
 - Or use `go` directly:
-  - `go build -o bin/hype ./cmd/hype`
+  - `go build -o build/hype ./cmd/hype`
 
 ## Install
 - From local source:
@@ -27,7 +27,7 @@
 - Version:
   - `hype -v` or `hype --version`
 - If using local build without install:
-  - `./bin/hype ...`
+  - `./build/hype ...`
 - Specify output directory:
   - `hype new -m github.com/<user>/<pkg> -o ./_sandbox`
 - The command generates a scaffolded Go project under the specified base directory; package name is derived from the output directory name, and the Go module path is set via `-m`.
