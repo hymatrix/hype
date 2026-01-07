@@ -1,0 +1,61 @@
+{
+  "pid": "process-123",
+  "items": [
+    {
+      "nonce": 0,
+      "msg": {
+        "SignatureType": 3,
+        "Signature": "MEUCIQD0pKqk2F3...==",
+        "Owner": "BQs3yQf0iV...==",
+        "Target": "",
+        "Anchor": "",
+        "Tags": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "Data": "SGVsbG8gV29ybGQ=",
+        "Id": "msgid-0001",
+        "TagsBy": ""
+      },
+      "assign": {
+        "SignatureType": 3,
+        "Signature": "MEYCIQDL7o7bUq...==",
+        "Owner": "BQs3yQf0iV...==",
+        "Target": "",
+        "Anchor": "",
+        "Tags": [
+          { "name": "Assign-Type", "value": "default" }
+        ],
+        "Data": "",
+        "Id": "assignid-0001",
+        "TagsBy": ""
+      }
+    },
+    {
+      "nonce": 1,
+      "msg": {
+        "SignatureType": 3,
+        "Signature": "MEQCIC9tVbRk...==",
+        "Owner": "BQs3yQf0iV...==",
+        "Target": "",
+        "Anchor": "",
+        "Tags": [
+          { "name": "Content-Type", "value": "text/plain" }
+        ],
+        "Data": "VXBkYXRlIG5vbmNlIDE=",
+        "Id": "msgid-0002",
+        "TagsBy": ""
+      },
+      "assign": {
+        "SignatureType": 3,
+        "Signature": "MEQCIFkZQwVJ...==",
+        "Owner": "BQs3yQf0iV...==",
+        "Target": "",
+        "Anchor": "",
+        "Tags": [],
+        "Data": "",
+        "Id": "assignid-0002",
+        "TagsBy": ""
+      }
+    }
+  ]
+}

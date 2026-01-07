@@ -33,6 +33,11 @@ func init() {
 	rootCmd.AddCommand(moduleCmd)
 	// run
 	rootCmd.AddCommand(runCmd)
+	// sync-json
+	syncJsonCmd.Flags().StringP("redis-url", "r", "", "Redis URL")
+	syncJsonCmd.Flags().StringP("file", "f", "", "JSON file path")
+	syncJsonCmd.Flags().BoolP("force", "F", false, "Override if data exists")
+	rootCmd.AddCommand(syncJsonCmd)
 	// version
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.SetVersionTemplate(versionBanner())
