@@ -29,11 +29,28 @@
   - `hype db-export --redis-url <redisURL> --pid <pid> --out <out> [--progress-every <n>]`
 - Version:
   - `hype -v` or `hype --version`
+- REPL (interactive mode):
+  - `hype` (no args) enters REPL by default
+  - `hype repl` enters REPL explicitly
 - If using local build without install:
   - `./build/hype ...`
 - Specify output directory:
   - `hype new -m github.com/<user>/<pkg> -o ./_sandbox`
 - The command generates a scaffolded Go project under the specified base directory; package name is derived from the output directory name, and the Go module path is set via `-m`.
+
+### REPL Mode
+- Start:
+  - `hype` or `hype repl`
+- Help & exit:
+  - `help` / `?`: show `hype --help`
+  - `exit` / `quit` or Ctrl-D: exit REPL
+- Run existing commands:
+  - Type subcommands directly (no `hype` prefix needed), e.g. `version`, `new -m ...`, `db-export ...`
+- Interactive required flags:
+  - If you omit required flags in REPL, hype will prompt you to enter them.
+  - If multiple required flags are missing, hype will prompt multiple times (one by one).
+- Shell escape:
+  - Prefix a line with `!` to execute it via `bash`, e.g. `!ls`, `!echo hello`
 
 ### Command: new
 - Description: Create a new Golang project scaffold for hymx Node.
