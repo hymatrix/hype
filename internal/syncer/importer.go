@@ -31,45 +31,7 @@ func ImportFromJSON(redisURL, jsonFile string, force bool) error {
 	if err != nil {
 		return err
 	}
-	return ImportItems(db, input.Pid, sorted, force)
-}
-
-func checkAndSort(items []schema.ImportItem) ([]schema.ImportItem, error) {
-	if len(items) == 0 {
-		return items, nil
-	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Nonce < items[j].Nonce })
-	if items[0].Nonce != 0 {
-		return nil, fmt.Errorf("nonce must start at 0")
-	}
-	for i := 1; i < len(items); i++ {
-		if items[i].Nonce != items[i-1].Nonce+1 {
-			return nil, fmt.Errorf("nonce not continuous at position %d", i)
-		}
-	}
-	return items, nil
-}
-
-func ImportItems(db nodeSchema.IDB, pid string, items []schema.ImportItem, force bool) error {
-	for _, it := range items {
-		exists := false
-		if it.Msg.Id != "" {
-			msg, err := db.GetMessage(it.Msg.Id)
-			if err != nil {
-				return err
-			}
-			if msg != nil {
-				exists = true
-			}
-		}
-		if exists && !force {
-			continue
-		}
-		if err := db.Commit(pid, it.Nonce, it.Msg, it.Assign); err != nil {
-			return err
-		}
-	}
-	return nil
+	return importItems(db, input.Pid, sorted, force)
 }
 
 func ImportFromJSONL(redisURL, jsonlFile string, force bool) error {
@@ -121,5 +83,43 @@ func ImportFromJSONL(redisURL, jsonlFile string, force bool) error {
 	if err != nil {
 		return err
 	}
-	return ImportItems(db, refPid, sorted, force)
+	return importItems(db, refPid, sorted, force)
+}
+
+func checkAndSort(items []schema.ImportItem) ([]schema.ImportItem, error) {
+	if len(items) == 0 {
+		return items, nil
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Nonce < items[j].Nonce })
+	if items[0].Nonce != 0 {
+		return nil, fmt.Errorf("nonce must start at 0")
+	}
+	for i := 1; i < len(items); i++ {
+		if items[i].Nonce != items[i-1].Nonce+1 {
+			return nil, fmt.Errorf("nonce not continuous at position %d", i)
+		}
+	}
+	return items, nil
+}
+
+func importItems(db nodeSchema.IDB, pid string, items []schema.ImportItem, force bool) error {
+	for _, it := range items {
+		exists := false
+		if it.Msg.Id != "" {
+			msg, err := db.GetMessage(it.Msg.Id)
+			if err != nil {
+				return err
+			}
+			if msg != nil {
+				exists = true
+			}
+		}
+		if exists && !force {
+			continue
+		}
+		if err := db.Commit(pid, it.Nonce, it.Msg, it.Assign); err != nil {
+			return err
+		}
+	}
+	return nil
 }

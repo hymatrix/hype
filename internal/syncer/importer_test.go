@@ -13,41 +13,70 @@ import (
 )
 
 type fakeDB struct {
-	msgIndex map[string]*goarSchema.BundleItem
-	lists    map[string][]goarSchema.BundleItem
+	msgIndex    map[string]*goarSchema.BundleItem
+	msgLists    map[string][]goarSchema.BundleItem
+	assignLists map[string][]goarSchema.BundleItem
+	nonceByPid  map[string]int64
 }
 
 func newFakeDB() *fakeDB {
 	return &fakeDB{
-		msgIndex: make(map[string]*goarSchema.BundleItem),
-		lists:    make(map[string][]goarSchema.BundleItem),
+		msgIndex:    make(map[string]*goarSchema.BundleItem),
+		msgLists:    make(map[string][]goarSchema.BundleItem),
+		assignLists: make(map[string][]goarSchema.BundleItem),
+		nonceByPid:  make(map[string]int64),
 	}
 }
 
 func (f *fakeDB) SaveResult(result vmmSchema.VmmResult) error             { return nil }
 func (f *fakeDB) GetResult(string) (*vmmSchema.VmmResult, error)          { return nil, nil }
 func (f *fakeDB) GetResults(string, int64) ([]vmmSchema.VmmResult, error) { return nil, nil }
-func (f *fakeDB) IsExist(string) (bool, error)                            { return false, nil }
-func (f *fakeDB) GetNonce(string) (int64, error)                          { return 0, nil }
+func (f *fakeDB) IsExist(pid string) (bool, error) {
+	_, ok := f.nonceByPid[pid]
+	return ok, nil
+}
+func (f *fakeDB) GetNonce(pid string) (int64, error) {
+	nonce, ok := f.nonceByPid[pid]
+	if !ok {
+		return -1, nil
+	}
+	return nonce, nil
+}
 func (f *fakeDB) Commit(pid string, nonce int64, msg, assign goarSchema.BundleItem) error {
-	f.lists[pid] = append(f.lists[pid], msg)
+	f.msgLists[pid] = append(f.msgLists[pid], msg)
+	f.assignLists[pid] = append(f.assignLists[pid], assign)
 	f.msgIndex[msg.Id] = &msg
+	f.nonceByPid[pid] = nonce
 	return nil
 }
 func (f *fakeDB) GetAllProcess() ([]string, []int64, error) { return nil, nil, nil }
 func (f *fakeDB) GetMessage(msgid string) (*goarSchema.BundleItem, error) {
 	return f.msgIndex[msgid], nil
 }
-func (f *fakeDB) GetMessageByNonce(string, int64) (*goarSchema.BundleItem, error) { return nil, nil }
-func (f *fakeDB) GetAssignByNonce(string, int64) (*goarSchema.BundleItem, error)  { return nil, nil }
-func (f *fakeDB) GetCheckpointIndex(string) (string, error)                       { return "", nil }
-func (f *fakeDB) SaveCheckpointIndex(string, string) error                        { return nil }
-func (f *fakeDB) GetCache(string, string) (string, error)                         { return "", nil }
-func (f *fakeDB) SaveCache(string, string, string) error                          { return nil }
+func (f *fakeDB) GetMessageByNonce(pid string, nonce int64) (*goarSchema.BundleItem, error) {
+	msgs := f.msgLists[pid]
+	if nonce < 0 || int(nonce) >= len(msgs) {
+		return nil, nil
+	}
+	m := msgs[nonce]
+	return &m, nil
+}
+func (f *fakeDB) GetAssignByNonce(pid string, nonce int64) (*goarSchema.BundleItem, error) {
+	assigns := f.assignLists[pid]
+	if nonce < 0 || int(nonce) >= len(assigns) {
+		return nil, nil
+	}
+	a := assigns[nonce]
+	return &a, nil
+}
+func (f *fakeDB) GetCheckpointIndex(string) (string, error) { return "", nil }
+func (f *fakeDB) SaveCheckpointIndex(string, string) error  { return nil }
+func (f *fakeDB) GetCache(string, string) (string, error)   { return "", nil }
+func (f *fakeDB) SaveCache(string, string, string) error    { return nil }
 
 var _ nodeSchema.IDB = (*fakeDB)(nil)
 
-func TestImportItems_SuccessAndForce(t *testing.T) {
+func TestimportItems_SuccessAndForce(t *testing.T) {
 	db := newFakeDB()
 	items := []syncSchema.ImportItem{
 		{Nonce: 0, Msg: goarSchema.BundleItem{Id: "msgid-1"}, Assign: goarSchema.BundleItem{Id: "assignid-1"}},
@@ -57,25 +86,25 @@ func TestImportItems_SuccessAndForce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("checkAndSort failed: %v", err)
 	}
-	if err := ImportItems(db, "p1", sorted, false); err != nil {
-		t.Fatalf("ImportItems failed: %v", err)
+	if err := importItems(db, "p1", sorted, false); err != nil {
+		t.Fatalf("importItems failed: %v", err)
 	}
-	if len(db.lists["p1"]) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(db.lists["p1"]))
+	if len(db.msgLists["p1"]) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(db.msgLists["p1"]))
 	}
 	// duplicate without force: skip
-	if err := ImportItems(db, "p1", sorted, false); err != nil {
-		t.Fatalf("ImportItems failed: %v", err)
+	if err := importItems(db, "p1", sorted, false); err != nil {
+		t.Fatalf("importItems failed: %v", err)
 	}
-	if len(db.lists["p1"]) != 2 {
-		t.Fatalf("expected 2 messages after skip, got %d", len(db.lists["p1"]))
+	if len(db.msgLists["p1"]) != 2 {
+		t.Fatalf("expected 2 messages after skip, got %d", len(db.msgLists["p1"]))
 	}
 	// with force: append duplicates
-	if err := ImportItems(db, "p1", sorted, true); err != nil {
-		t.Fatalf("ImportItems failed: %v", err)
+	if err := importItems(db, "p1", sorted, true); err != nil {
+		t.Fatalf("importItems failed: %v", err)
 	}
-	if len(db.lists["p1"]) != 4 {
-		t.Fatalf("expected 4 messages after force, got %d", len(db.lists["p1"]))
+	if len(db.msgLists["p1"]) != 4 {
+		t.Fatalf("expected 4 messages after force, got %d", len(db.msgLists["p1"]))
 	}
 }
 
@@ -140,11 +169,11 @@ func TestJSONLExample_ParseAndImport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("checkAndSort failed: %v", err)
 	}
-	if err := ImportItems(db, pid, sorted, false); err != nil {
-		t.Fatalf("ImportItems failed: %v", err)
+	if err := importItems(db, pid, sorted, false); err != nil {
+		t.Fatalf("importItems failed: %v", err)
 	}
-	if len(db.lists[pid]) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(db.lists[pid]))
+	if len(db.msgLists[pid]) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(db.msgLists[pid]))
 	}
 }
 func TestImportFromJSONL_WithPidAndInlinePid(t *testing.T) {
@@ -165,7 +194,7 @@ func TestImportFromJSONL_WithPidAndInlinePid(t *testing.T) {
 		t.Fatalf("write jsonl failed: %v", err)
 	}
 	// import using public function with db via wrapper
-	// since ImportFromJSONL creates its own db, test ImportItems after parsing
+	// since ImportFromJSONL creates its own db, test importItems after parsing
 	// simulate parse
 	var parsed []syncSchema.ImportLine
 	for _, l := range lines {
@@ -183,10 +212,10 @@ func TestImportFromJSONL_WithPidAndInlinePid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("checkAndSort failed: %v", err)
 	}
-	if err := ImportItems(db, "p1", sorted, false); err != nil {
-		t.Fatalf("ImportItems failed: %v", err)
+	if err := importItems(db, "p1", sorted, false); err != nil {
+		t.Fatalf("importItems failed: %v", err)
 	}
-	if len(db.lists["p1"]) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(db.lists["p1"]))
+	if len(db.msgLists["p1"]) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(db.msgLists["p1"]))
 	}
 }

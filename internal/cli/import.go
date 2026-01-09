@@ -10,9 +10,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var syncJsonCmd = &cobra.Command{
-	Use:   "sync-json",
-	Short: "Sync a json data file into redis",
+var dbImportCmd = &cobra.Command{
+	Use:   "db-import",
+	Short: "Import a json data file into redis",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		redisURL, err := cmd.Flags().GetString("redis-url")
 		if err != nil {
@@ -31,17 +31,17 @@ var syncJsonCmd = &cobra.Command{
 		}
 		if strings.HasSuffix(jsonFile, ".jsonl") {
 			if err := syncer.ImportFromJSONL(redisURL, jsonFile, force); err != nil {
-				fmt.Fprintln(os.Stderr, "sync-json failed:", err)
+				fmt.Fprintln(os.Stderr, "db-import failed:", err)
 				return err
 			}
-			fmt.Println("sync-json succeeded (jsonl)")
+			fmt.Println("db-import succeeded (jsonl)")
 			return nil
 		}
 		if err := syncer.ImportFromJSON(redisURL, jsonFile, force); err != nil {
-			fmt.Fprintln(os.Stderr, "sync-json failed:", err)
+			fmt.Fprintln(os.Stderr, "db-import failed:", err)
 			return err
 		}
-		fmt.Println("sync-json succeeded")
+		fmt.Println("db-import succeeded")
 		return nil
 	},
 }

@@ -19,3 +19,8 @@ type ImportLine struct {
 	Msg    goarSchema.BundleItem `json:"msg"`
 	Assign goarSchema.BundleItem `json:"assign"`
 }
+
+type ExportOptions struct {
+	ProgressEvery int64
+	Progress      func(done, total int64)
+}
