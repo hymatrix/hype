@@ -106,7 +106,10 @@ func importItems(db nodeSchema.IDB, pid string, items []schema.ImportItem, force
 	for _, it := range items {
 		exists := false
 		if it.Msg.Id != "" {
-			msg, _ := db.GetMessage(it.Msg.Id)
+			msg, err := db.GetMessage(it.Msg.Id)
+			if err != nil {
+				return err
+			}
 			if msg != nil {
 				exists = true
 			}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/hymatrix/hype/internal/syncer"
@@ -34,6 +35,9 @@ func newExportJSONLCmd() *cobra.Command {
 			outFile, err := cmd.Flags().GetString("out")
 			if err != nil {
 				return err
+			}
+			if outFile != "" && !strings.HasSuffix(outFile, ".jsonl") && !strings.HasSuffix(outFile, ".jsonl.gz") {
+				outFile = outFile + ".jsonl"
 			}
 			progressEvery, err := cmd.Flags().GetInt64("progress-every")
 			if err != nil {

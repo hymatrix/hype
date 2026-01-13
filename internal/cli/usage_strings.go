@@ -16,7 +16,7 @@ const (
 	usage_module_private_key = "Ethereum ECDSA secp256k1 private key hex (0x-prefixed)"
 
 	usage_db_import_redis_url = "Redis URL"
-	usage_db_import_file      = "JSON file path"
+	usage_db_import_file      = "JSONL file path"
 	usage_db_import_force     = "Override if data exists"
 
 	usage_db_export_redis_url      = "Redis URL"

@@ -36,19 +36,14 @@ func newDBImportCmd() *cobra.Command {
 			if redisURL == "" || jsonFile == "" {
 				return errors.New("redis-url and file are required")
 			}
-			if strings.HasSuffix(jsonFile, ".jsonl") {
-				if err := syncer.ImportFromJSONL(redisURL, jsonFile, force); err != nil {
-					fmt.Fprintln(os.Stderr, "db-import failed:", err)
-					return err
-				}
-				fmt.Println("db-import succeeded (jsonl)")
-				return nil
+			if !strings.HasSuffix(jsonFile, ".jsonl") {
+				return errors.New("file must be .jsonl")
 			}
-			if err := syncer.ImportFromJSON(redisURL, jsonFile, force); err != nil {
+			if err := syncer.ImportFromJSONL(redisURL, jsonFile, force); err != nil {
 				fmt.Fprintln(os.Stderr, "db-import failed:", err)
 				return err
 			}
-			fmt.Println("db-import succeeded")
+			fmt.Println("db-import succeeded (jsonl)")
 			return nil
 		},
 	}
