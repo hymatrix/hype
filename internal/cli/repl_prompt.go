@@ -15,8 +15,9 @@ type replInKey struct{}
 type replOutKey struct{}
 
 type replFlagPrompt struct {
-	Name   string
-	Prompt string
+	Name     string
+	Prompt   string
+	Optional bool
 }
 
 func withRepl(ctx context.Context, in *bufio.Reader, out io.Writer) context.Context {
@@ -59,6 +60,9 @@ func replPromptRequiredStringFlags(cmd *cobra.Command, prompts []replFlagPrompt)
 			}
 			s = strings.TrimSpace(s)
 			if s == "" {
+				if p.Optional {
+					break
+				}
 				continue
 			}
 			if err := cmd.Flags().Set(p.Name, s); err != nil {

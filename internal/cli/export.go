@@ -17,11 +17,12 @@ func newExportJSONLCmd() *cobra.Command {
 		Use:   "db-export",
 		Short: "Export process data from redis into jsonl",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			return replPromptRequiredStringFlags(cmd, []replFlagPrompt{
+			prompts := []replFlagPrompt{
 				{Name: "redis-url", Prompt: "redis-url (-r/--redis-url) " + usage_db_export_redis_url + ": "},
-				{Name: "pid", Prompt: "pid (-p/--pid) " + usage_db_export_pid + ": "},
 				{Name: "out", Prompt: "out (-o/--out) " + usage_db_export_out + ": "},
-			})
+				{Name: "pid", Prompt: "pid (-p/--pid) " + usage_db_export_pid + ": ", Optional: true},
+			}
+			return replPromptRequiredStringFlags(cmd, prompts)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			redisURL, err := cmd.Flags().GetString("redis-url")
@@ -43,8 +44,8 @@ func newExportJSONLCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if redisURL == "" || pid == "" || outFile == "" {
-				return errors.New("redis-url, pid and out are required")
+			if redisURL == "" || outFile == "" {
+				return errors.New("redis-url and out are required")
 			}
 
 			start := time.Now()
@@ -62,14 +63,22 @@ func newExportJSONLCmd() *cobra.Command {
 				}
 			}
 
-			if err := syncer.ExportToJSONL(redisURL, pid, outFile, &schema.ExportOptions{
-				ProgressEvery: progressEvery,
-				Progress:      progress,
-			}); err != nil {
+			if strings.TrimSpace(pid) != "" {
+				if err := syncer.ExportToJSONL(redisURL, pid, outFile, &schema.ExportOptions{
+					ProgressEvery: progressEvery,
+					Progress:      progress,
+				}); err != nil {
+					fmt.Fprintln(os.Stderr, "db-export failed:", err)
+					return err
+				}
+				fmt.Println("db-export succeeded:", outFile)
+				return nil
+			}
+			if err := syncer.ExportAllToJSONL(redisURL, outFile, nil); err != nil {
 				fmt.Fprintln(os.Stderr, "db-export failed:", err)
 				return err
 			}
-			fmt.Println("db-export succeeded:", outFile)
+			fmt.Println("db-export succeeded to directory:", outFile)
 			return nil
 		},
 	}

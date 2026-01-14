@@ -20,7 +20,8 @@ const (
 	usage_db_import_force     = "Override if data exists"
 
 	usage_db_export_redis_url      = "Redis URL"
-	usage_db_export_pid            = "Process id"
-	usage_db_export_out            = "Output jsonl file path (supports .gz)"
+	usage_db_export_pid            = "Process id (leave empty to export all)"
+	usage_db_export_out            = "Output jsonl file path (supports .gz) or directory (if pid is empty)"
 	usage_db_export_progress_every = "Print progress every N lines"
+	usage_db_export_accid          = "Account id to list processes"
 )
