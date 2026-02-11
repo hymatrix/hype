@@ -24,9 +24,11 @@ hype new -m github.com/username/my-project -o ./output
 
 ### 2. Module Management
 Scaffold and mount new VMMs:
+--name: name of the VMM
+--format: module format of the VMM. e.g. `hymx.token.foo.0.0.1`
 ```bash
 # Create and mount a new VMM
-hype vmm --name my_vmm --format lua
+hype vmm --name my_token --format hymx.token.foo.0.0.1
 
 # Mount an existing VMM package
 hype mount --name existing_vmm
