@@ -64,7 +64,7 @@
 - Description: Manage or scaffold a VM module, and auto-mount it into `cmd/main.go`.
 - Flags:
   - `--name`, `-n`: Name of the vmm
-  - `--format`, `-f`: Module format of the vmm
+  - `--format`, `-f`: Module format of the vmm. e.g. `hymx.token.foo.0.0.1`
 - Notes:
   - Automatically inserts imports (`<vmm>`, `<vmm>Schema`) and adds `s.Mount(<vmm>Schema.ModuleFormat, <vmm>.Spawn)` into `cmd/main.go`.
   - Run inside the generated project root (the directory containing `cmd/main.go`).
