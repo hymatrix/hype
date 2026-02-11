@@ -12,7 +12,7 @@
 - From local source:
   - `go install ./cmd/hype`
 - From GitHub with version:
-  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.1`
+  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.2`
   or
   - `go install github.com/hymatrix/hype/cmd/hype@latest`
 - Ensure `$(go env GOPATH)/bin` (or `GOBIN`) is in your `PATH`.
