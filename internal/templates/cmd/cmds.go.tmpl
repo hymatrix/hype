@@ -17,6 +17,7 @@ var (
 		{
 			Name:  "start",
 			Usage: "run server in deamon mode",
+			Flags: flags,
 			Action: func(c *cli.Context) error {
 				configPath := c.String("config")
 				if configPath == "" {
@@ -33,7 +34,7 @@ var (
 				if err != nil {
 					return err
 				}
-				command := exec.Command(path, "--config", c.String("config"))
+				command := exec.Command(path, "--config", configPath, "--mode", c.String("mode"))
 
 				// log
 				logName := fmt.Sprintf("%s_%s_%d.log", schema.DataProtocol, nodeSchema.NodeVersion, time.Now().Unix())
@@ -62,17 +63,18 @@ var (
 			Action: func(c *cli.Context) error {
 				strb, err := os.ReadFile(Pid)
 				if err != nil {
-					log.Error("stop server failed", "err", err)
+					fmt.Printf("read pid file failed: %v\n", err)
 					return err
 				}
 				command := exec.Command("kill", string(strb))
 				if err := command.Start(); err != nil {
+					fmt.Printf("kill process failed: %v\n", err)
 					return err
 				}
 				if err := os.Remove(Pid); err != nil {
+					fmt.Printf("remove pid file failed: %v\n", err)
 					return err
 				}
-				log.Info("server is stopped")
 
 				return nil
 			},

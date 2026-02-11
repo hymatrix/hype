@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"runtime"
 
+	nodeSchema "github.com/hymatrix/hymx/node/schema"
 	"github.com/spf13/cobra"
 )
 
 const (
-	Version = "v0.0.1"
+	Version = "v0.0.2"
 )
 
 func versionBanner() string {
@@ -20,11 +21,12 @@ func versionBanner() string {
 hype: Hymx CLI tool
 https://github.com/hymatrix/hype
 
-Version:    %s
-GoVersion:  %s
-Compiler:   %s
-Platform:   %s/%s
-`, Version, runtime.Version(), runtime.Compiler, runtime.GOOS, runtime.GOARCH)
+Version:     %s
+HymxVersion: %s
+GoVersion:   %s
+Compiler:    %s
+Platform:    %s/%s
+`, Version, nodeSchema.NodeVersion, runtime.Version(), runtime.Compiler, runtime.GOOS, runtime.GOARCH)
 }
 
 func newVersionCmd() *cobra.Command {

@@ -23,7 +23,7 @@
   - `hype vmm --name <vmm> --format <format>`
   - `hype mount --name <vmm>`
   - `hype module --name <module> [-u <nodeURL>] [-k <privateKey>]`
-  - `hype run`
+  - `hype run [--mode <mode>]`
   - `hype db-import --redis-url <redisURL> --file <jsonl> [--force]`
   - `hype db-export --redis-url <redisURL> --pid <pid> --out <out> [--progress-every <n>]`
 - Version:
@@ -91,8 +91,10 @@
 
 ### Command: run
 - Description: Run the generated project.
+- Flags:
+  - `--mode`, `-m`: Start mode (`normal` or `rebuild`). Default: `normal`.
 - Flow:
-  - Executes: `cd cmd && go run ./`
+  - Executes: `cd cmd && go run ./ [--mode <mode>]`
   - From the generated project root, runs the `cmd/main.go` entrypoint.
 
 ### Command: db-import
