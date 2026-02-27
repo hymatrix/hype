@@ -64,26 +64,30 @@ func ImportFromJSONL(redisURL, jsonlFile string, force bool) error {
 	if len(lines) == 0 {
 		return nil
 	}
-	refPid := lines[0].Pid
-	if refPid == "" {
-		return errors.New("pid is required in each jsonl line")
-	}
-	items := make([]schema.ImportItem, 0, len(lines))
+
+	// group by pid
+	groups := make(map[string][]schema.ImportItem)
 	for _, ln := range lines {
-		if ln.Pid == "" || ln.Pid != refPid {
-			return fmt.Errorf("mixed pid in jsonl: %s vs %s", ln.Pid, refPid)
+		if ln.Pid == "" {
+			return errors.New("pid is required in each jsonl line")
 		}
-		items = append(items, schema.ImportItem{
+		groups[ln.Pid] = append(groups[ln.Pid], schema.ImportItem{
 			Nonce:  ln.Nonce,
 			Msg:    ln.Msg,
 			Assign: ln.Assign,
 		})
 	}
-	sorted, err := checkAndSort(items)
-	if err != nil {
-		return err
+
+	for pid, items := range groups {
+		sorted, err := checkAndSort(items)
+		if err != nil {
+			return fmt.Errorf("pid %s check failed: %w", pid, err)
+		}
+		if err := importItems(db, pid, sorted, force); err != nil {
+			return fmt.Errorf("pid %s import failed: %w", pid, err)
+		}
 	}
-	return importItems(db, refPid, sorted, force)
+	return nil
 }
 
 func checkAndSort(items []schema.ImportItem) ([]schema.ImportItem, error) {

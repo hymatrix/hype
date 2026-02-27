@@ -16,6 +16,19 @@ import (
 )
 
 func ExportToJSONL(redisURL, pid, outFile string, opts *schema.ExportOptions) error {
+	if redisURL == "" || pid == "" || outFile == "" {
+		return errors.New("redis-url, pid and outFile are required")
+	}
+	db := rdb.New(redisURL)
+	defer db.Close()
+	return exportToJSONLWithDB(db, pid, outFile, opts)
+}
+
+func ExportAllToJSONL(redisURL, outFile string, opts *schema.ExportOptions) error {
+	if redisURL == "" || outFile == "" {
+		return errors.New("redis-url and out are required")
+	}
+
 	var progressEvery int64
 	var progress func(done, total int64)
 	if opts != nil {
@@ -23,11 +36,48 @@ func ExportToJSONL(redisURL, pid, outFile string, opts *schema.ExportOptions) er
 		progress = opts.Progress
 	}
 
-	if redisURL == "" || pid == "" || outFile == "" {
-		return errors.New("redis-url, pid and outFile are required")
-	}
 	db := rdb.New(redisURL)
 	defer db.Close()
+
+	pids, _, err := db.GetAllProcess()
+	if err != nil {
+		return err
+	}
+	if len(pids) == 0 {
+		return nil
+	}
+
+	f, err := os.Create(outFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if strings.HasSuffix(outFile, ".gz") {
+		gw := gzip.NewWriter(f)
+		defer gw.Close()
+		for _, p := range pids {
+			if err := exportLinesWithProgress(db, p, gw, progressEvery, progress); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, p := range pids {
+		if err := exportLinesWithProgress(db, p, f, progressEvery, progress); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func exportToJSONLWithDB(db nodeSchema.IDB, pid, outFile string, opts *schema.ExportOptions) error {
+	var progressEvery int64
+	var progress func(done, total int64)
+	if opts != nil {
+		progressEvery = opts.ProgressEvery
+		progress = opts.Progress
+	}
 
 	f, err := os.Create(outFile)
 	if err != nil {

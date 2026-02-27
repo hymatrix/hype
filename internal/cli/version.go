@@ -27,10 +27,12 @@ Platform:   %s/%s
 `, Version, runtime.Version(), runtime.Compiler, runtime.GOOS, runtime.GOARCH)
 }
 
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Print version information",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Print(versionBanner())
-	},
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print version information",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Print(versionBanner())
+		},
+	}
 }

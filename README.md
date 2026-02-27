@@ -24,16 +24,32 @@
   - `hype mount --name <vmm>`
   - `hype module --name <module> [-u <nodeURL>] [-k <privateKey>]`
   - `hype run`
-  - `hype db-import --redis-url <redisURL> --file <json> [--force]`
   - `hype db-import --redis-url <redisURL> --file <jsonl> [--force]`
   - `hype db-export --redis-url <redisURL> --pid <pid> --out <out> [--progress-every <n>]`
 - Version:
   - `hype -v` or `hype --version`
+- REPL (interactive mode):
+  - `hype` (no args) enters REPL by default
+  - `hype repl` enters REPL explicitly
 - If using local build without install:
   - `./build/hype ...`
 - Specify output directory:
   - `hype new -m github.com/<user>/<pkg> -o ./_sandbox`
 - The command generates a scaffolded Go project under the specified base directory; package name is derived from the output directory name, and the Go module path is set via `-m`.
+
+### REPL Mode
+- Start:
+  - `hype` or `hype repl`
+- Help & exit:
+  - `help` / `?`: show `hype --help`
+  - `exit` / `quit` or Ctrl-D: exit REPL
+- Run existing commands:
+  - Type subcommands directly (no `hype` prefix needed), e.g. `version`, `new -m ...`, `db-export ...`
+- Interactive required flags:
+  - If you omit required flags in REPL, hype will prompt you to enter them.
+  - If multiple required flags are missing, hype will prompt multiple times (one by one).
+- Shell escape:
+  - Prefix a line with `!` to execute it via `bash`, e.g. `!ls`, `!echo hello`
 
 ### Command: new
 - Description: Create a new Golang project scaffold for hymx Node.
@@ -80,34 +96,13 @@
   - From the generated project root, runs the `cmd/main.go` entrypoint.
 
 ### Command: db-import
-- Description: Import a JSON data file into Redis, calling IDB.Commit for each item.
+- Description: Import a JSONL data file into Redis, calling IDB.Commit for each item.
 - Flags:
   - `--redis-url`, `-r`: Redis connection URL (e.g. `redis://@localhost:6379/0`). Required.
-  - `--file`, `-f`: Path to JSON or JSONL file. Required.
+  - `--file`, `-f`: Path to JSONL file. Required.
   - `--force`, `-F`: If set, write even if msg.Id already exists; otherwise skip duplicates.
-  - For JSONL, each line must include `pid`.
-- JSON format:
-  - Outer object contains `pid` and an `items` array. Each item has `nonce`, `msg`, and `assign` fields.
-  - Example:
-
-```json
-{
-  "pid": "process-123",
-  "items": [
-    {
-      "nonce": 0,
-      "msg": { "Id": "msgid-0001", "SignatureType": 3, "Signature": "", "Owner": "", "Target": "", "Anchor": "", "Tags": [], "Data": "", "TagsBy": "" },
-      "assign": { "Id": "assignid-0001", "SignatureType": 3, "Signature": "", "Owner": "", "Target": "", "Anchor": "", "Tags": [], "Data": "", "TagsBy": "" }
-    },
-    {
-      "nonce": 1,
-      "msg": { "Id": "msgid-0002", "SignatureType": 3, "Signature": "", "Owner": "", "Target": "", "Anchor": "", "Tags": [], "Data": "", "TagsBy": "" },
-      "assign": { "Id": "assignid-0002", "SignatureType": 3, "Signature": "", "Owner": "", "Target": "", "Anchor": "", "Tags": [], "Data": "", "TagsBy": "" }
-    }
-  ]
-}
-```
-
+- JSONL format:
+  - Each line is an object with `{pid, nonce, msg, assign}`.
 - Flow:
   - Sorts items by `nonce`, validates start at 0 and continuous increments.
   - Checks existing messages via `GetMessage(msg.Id)`.
@@ -115,10 +110,7 @@
     - With `--force`: append regardless.
   - Calls `Commit(pid, nonce, msg, assign)` for each item.
 - Example:
-  - `./build/hype db-import --redis-url redis://@localhost:6379/0 --file ./internal/syncer/schema/example2.json`
-  - `./build/hype db-import --redis-url redis://@localhost:6379/0 --file ./internal/syncer/schema/example2.json --force`
-  - JSONL per-line object; each line must be `{pid, nonce, msg, assign}`:
-    - `./build/hype db-import --redis-url redis://@localhost:6379/0 --file ./data.jsonl`
+  - `./build/hype db-import --redis-url redis://@localhost:6379/0 --file ./data.jsonl`
 
 ### Command: db-export
 - Description: Export a process from Redis into JSONL (supports .gz).

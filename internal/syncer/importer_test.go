@@ -76,7 +76,7 @@ func (f *fakeDB) SaveCache(string, string, string) error    { return nil }
 
 var _ nodeSchema.IDB = (*fakeDB)(nil)
 
-func TestimportItems_SuccessAndForce(t *testing.T) {
+func TestImportItems_SuccessAndForce(t *testing.T) {
 	db := newFakeDB()
 	items := []syncSchema.ImportItem{
 		{Nonce: 0, Msg: goarSchema.BundleItem{Id: "msgid-1"}, Assign: goarSchema.BundleItem{Id: "assignid-1"}},
