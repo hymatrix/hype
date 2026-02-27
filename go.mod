@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/everFinance/goether v1.2.0
-	github.com/hymatrix/hymx v0.4.5
+	github.com/hymatrix/hymx v0.4.7
 	github.com/permadao/goar v1.1.1
 	github.com/spf13/cobra v1.10.2
 )

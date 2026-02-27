@@ -10,7 +10,7 @@ import (
 )
 
 func newRunCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "run",
 		Short: "Run generated project (cd cmd && go run ./)",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -25,11 +25,26 @@ func newRunCmd() *cobra.Command {
 				}
 				return err
 			}
-			c := exec.Command("go", "run", "./")
+
+			mode, err := cmd.Flags().GetString("mode")
+			if err != nil {
+				return err
+			}
+
+			runArgs := []string{"run", "./"}
+			if mode != "" {
+				runArgs = append(runArgs, "--mode", mode)
+			}
+
+			c := exec.Command("go", runArgs...)
 			c.Dir = cmdDir
 			c.Stdout = os.Stdout
 			c.Stderr = os.Stderr
 			return c.Run()
 		},
 	}
+
+	cmd.Flags().StringP("mode", "m", "normal", "start mode: normal or rebuild")
+
+	return cmd
 }

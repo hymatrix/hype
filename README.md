@@ -12,7 +12,7 @@
 - From local source:
   - `go install ./cmd/hype`
 - From GitHub with version:
-  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.1`
+  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.2`
   or
   - `go install github.com/hymatrix/hype/cmd/hype@latest`
 - Ensure `$(go env GOPATH)/bin` (or `GOBIN`) is in your `PATH`.
@@ -23,7 +23,7 @@
   - `hype vmm --name <vmm> --format <format>`
   - `hype mount --name <vmm>`
   - `hype module --name <module> [-u <nodeURL>] [-k <privateKey>]`
-  - `hype run`
+  - `hype run [--mode <mode>]`
   - `hype db-import --redis-url <redisURL> --file <jsonl> [--force]`
   - `hype db-export --redis-url <redisURL> --pid <pid> --out <out> [--progress-every <n>]`
 - Version:
@@ -64,7 +64,7 @@
 - Description: Manage or scaffold a VM module, and auto-mount it into `cmd/main.go`.
 - Flags:
   - `--name`, `-n`: Name of the vmm
-  - `--format`, `-f`: Module format of the vmm
+  - `--format`, `-f`: Module format of the vmm. e.g. `hymx.token.foo.0.0.1`
 - Notes:
   - Automatically inserts imports (`<vmm>`, `<vmm>Schema`) and adds `s.Mount(<vmm>Schema.ModuleFormat, <vmm>.Spawn)` into `cmd/main.go`.
   - Run inside the generated project root (the directory containing `cmd/main.go`).
@@ -91,8 +91,10 @@
 
 ### Command: run
 - Description: Run the generated project.
+- Flags:
+  - `--mode`, `-m`: Start mode (`normal` or `rebuild`). Default: `normal`.
 - Flow:
-  - Executes: `cd cmd && go run ./`
+  - Executes: `cd cmd && go run ./ [--mode <mode>]`
   - From the generated project root, runs the `cmd/main.go` entrypoint.
 
 ### Command: db-import
