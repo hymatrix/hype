@@ -33,6 +33,17 @@ func init() {
 	rootCmd.AddCommand(moduleCmd)
 	// run
 	rootCmd.AddCommand(runCmd)
+	// db-import
+	dbImportCmd.Flags().StringP("redis-url", "r", "", "Redis URL")
+	dbImportCmd.Flags().StringP("file", "f", "", "JSON file path")
+	dbImportCmd.Flags().BoolP("force", "F", false, "Override if data exists")
+	rootCmd.AddCommand(dbImportCmd)
+	// db-export
+	exportJsonlCmd.Flags().StringP("redis-url", "r", "", "Redis URL")
+	exportJsonlCmd.Flags().StringP("pid", "p", "", "Process id")
+	exportJsonlCmd.Flags().StringP("out", "o", "", "Output jsonl file path (supports .gz)")
+	exportJsonlCmd.Flags().Int64("progress-every", 1000, "Print progress every N lines")
+	rootCmd.AddCommand(exportJsonlCmd)
 	// version
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.SetVersionTemplate(versionBanner())

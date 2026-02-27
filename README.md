@@ -24,6 +24,9 @@
   - `hype mount --name <vmm>`
   - `hype module --name <module> [-u <nodeURL>] [-k <privateKey>]`
   - `hype run`
+  - `hype db-import --redis-url <redisURL> --file <json> [--force]`
+  - `hype db-import --redis-url <redisURL> --file <jsonl> [--force]`
+  - `hype db-export --redis-url <redisURL> --pid <pid> --out <out> [--progress-every <n>]`
 - Version:
   - `hype -v` or `hype --version`
 - If using local build without install:
@@ -75,6 +78,58 @@
 - Flow:
   - Executes: `cd cmd && go run ./`
   - From the generated project root, runs the `cmd/main.go` entrypoint.
+
+### Command: db-import
+- Description: Import a JSON data file into Redis, calling IDB.Commit for each item.
+- Flags:
+  - `--redis-url`, `-r`: Redis connection URL (e.g. `redis://@localhost:6379/0`). Required.
+  - `--file`, `-f`: Path to JSON or JSONL file. Required.
+  - `--force`, `-F`: If set, write even if msg.Id already exists; otherwise skip duplicates.
+  - For JSONL, each line must include `pid`.
+- JSON format:
+  - Outer object contains `pid` and an `items` array. Each item has `nonce`, `msg`, and `assign` fields.
+  - Example:
+
+```json
+{
+  "pid": "process-123",
+  "items": [
+    {
+      "nonce": 0,
+      "msg": { "Id": "msgid-0001", "SignatureType": 3, "Signature": "", "Owner": "", "Target": "", "Anchor": "", "Tags": [], "Data": "", "TagsBy": "" },
+      "assign": { "Id": "assignid-0001", "SignatureType": 3, "Signature": "", "Owner": "", "Target": "", "Anchor": "", "Tags": [], "Data": "", "TagsBy": "" }
+    },
+    {
+      "nonce": 1,
+      "msg": { "Id": "msgid-0002", "SignatureType": 3, "Signature": "", "Owner": "", "Target": "", "Anchor": "", "Tags": [], "Data": "", "TagsBy": "" },
+      "assign": { "Id": "assignid-0002", "SignatureType": 3, "Signature": "", "Owner": "", "Target": "", "Anchor": "", "Tags": [], "Data": "", "TagsBy": "" }
+    }
+  ]
+}
+```
+
+- Flow:
+  - Sorts items by `nonce`, validates start at 0 and continuous increments.
+  - Checks existing messages via `GetMessage(msg.Id)`.
+    - Without `--force`: skip if exists.
+    - With `--force`: append regardless.
+  - Calls `Commit(pid, nonce, msg, assign)` for each item.
+- Example:
+  - `./build/hype db-import --redis-url redis://@localhost:6379/0 --file ./internal/syncer/schema/example2.json`
+  - `./build/hype db-import --redis-url redis://@localhost:6379/0 --file ./internal/syncer/schema/example2.json --force`
+  - JSONL per-line object; each line must be `{pid, nonce, msg, assign}`:
+    - `./build/hype db-import --redis-url redis://@localhost:6379/0 --file ./data.jsonl`
+
+### Command: db-export
+- Description: Export a process from Redis into JSONL (supports .gz).
+- Flags:
+  - `--redis-url`, `-r`: Redis connection URL. Required.
+  - `--pid`, `-p`: Process id. Required.
+  - `--out`, `-o`: Output file path (e.g. `./data.jsonl` or `./data.jsonl.gz`). Required.
+  - `--progress-every`: Print progress every N lines. Default: 1000.
+- Example:
+  - `./build/hype db-export --redis-url redis://@localhost:6379/0 --pid process-123 --out ./process-123.jsonl`
+  - `./build/hype db-export --redis-url redis://@localhost:6379/0 --pid process-123 --out ./process-123.jsonl.gz`
 
 ### Generated Structure
 - Base path: `<out>/<pkg>/`
