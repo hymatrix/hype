@@ -148,6 +148,30 @@
   - `spawn` sets `Container-Env-OPENCLAW_TIMEOUT_MS`; default is `180000`, valid range `[1000, 3600000]`.
   - `conf-tg` requires `--bot-token`; `--default-account` defaults to `main`; `--dm-policy` defaults to `pairing`.
 
+## Hype Web UI
+- Description: Local Web UI for `hype openclaw` commands (`spawn`, `conf-tg`, `pair-tg`, `chat`).
+- Features:
+  - Local-only API server (`127.0.0.1:7788`).
+  - Executes `hype openclaw <subcommand> --json`.
+  - Displays structured JSON and raw stdout/stderr.
+  - Masks sensitive fields in command preview.
+  - Keeps secrets in memory only (no localStorage persistence).
+- Binary resolution order:
+  1. `<repo>/build/hype`
+  2. `hype` from `$PATH`
+- Run (single entry):
+  - `./frontend/scripts/start.sh`
+  - Open: `http://127.0.0.1:7788`
+- Run (development):
+  - `./frontend/scripts/dev.sh`
+  - API: `http://127.0.0.1:7788`
+  - Vite: `http://127.0.0.1:5173`
+- Backend environment variables:
+  - `OPENCLAW_WEBUI_LISTEN` (default `127.0.0.1:7788`)
+  - `OPENCLAW_WEBUI_TIMEOUT_MS` (default `90000`)
+  - `HYPE_PRIVATE_KEY` or `PRV_KEY` may be used if UI privateKey is empty
+- More details: `frontend/README.md`
+
 ### Generated Structure
 - Base path: `<out>/<pkg>/`
 - Contents:
