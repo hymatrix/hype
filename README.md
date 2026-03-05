@@ -26,6 +26,10 @@
   - `hype run [--mode <mode>]`
   - `hype db-import --redis-url <redisURL> --file <jsonl> [--force]`
   - `hype db-export --redis-url <redisURL> --pid <pid> --out <out> [--progress-every <n>]`
+  - `hype openclaw spawn -m <moduleId> -s <scheduler> --model <model> [--timeout-ms <ms>] --api-key <key> --gateway-token <token> -k <privateKey> [-u <nodeURL>]`
+  - `hype openclaw conf-tg -p <pid> --bot-token <token> [--default-account <account>] [--dm-policy <policy>] [--allow-from <value>] -k <privateKey> [-u <nodeURL>]`
+  - `hype openclaw pair-tg -p <pid> -c <pairCode> [--channel telegram] [--dm-policy pairing] -k <privateKey> [-u <nodeURL>]`
+  - `hype openclaw chat -p <pid> -c <command> -k <privateKey> [-u <nodeURL>]`
 - Version:
   - `hype -v` or `hype --version`
 - REPL (interactive mode):
@@ -40,6 +44,8 @@
 ### REPL Mode
 - Start:
   - `hype` or `hype repl`
+  - with private key preset for Openclaw commands:
+    - `HYPE_PRIVATE_KEY=0x... ./hype`
 - Help & exit:
   - `help` / `?`: show `hype --help`
   - `exit` / `quit` or Ctrl-D: exit REPL
@@ -124,6 +130,23 @@
 - Example:
   - `./build/hype db-export --redis-url redis://@localhost:6379/0 --pid process-123 --out ./process-123.jsonl`
   - `./build/hype db-export --redis-url redis://@localhost:6379/0 --pid process-123 --out ./process-123.jsonl.gz`
+
+
+### Command: openclaw
+- Description: Execute Openclaw runtime workflows through hymx SDK.
+- Subcommands:
+  - `spawn`: Create a new Openclaw process using module + scheduler + spawn tags.
+  - `conf-tg`: Configure Telegram runtime settings (`ConfigureTelegram`).
+  - `pair-tg`: Approve Telegram pairing (`ApproveTelegramPairing`).
+  - `chat`: Send a chat message (`Chat`).
+- Shared Flags:
+  - `--node-url`, `-u`: Node URL. Default: `http://127.0.0.1:8080`.
+  - `--private-key`, `-k`: Private key; fallback order is `--private-key` > `HYPE_PRIVATE_KEY` > `PRV_KEY`.
+  - `--json`: Print JSON output.
+- Notes:
+  - `spawn` requires all of: `--module-id`, `--scheduler`, `--model`, `--api-key`, `--gateway-token`.
+  - `spawn` sets `Container-Env-OPENCLAW_TIMEOUT_MS`; default is `180000`, valid range `[1000, 3600000]`.
+  - `conf-tg` requires `--bot-token`; `--default-account` defaults to `main`; `--dm-policy` defaults to `pairing`.
 
 ### Generated Structure
 - Base path: `<out>/<pkg>/`
