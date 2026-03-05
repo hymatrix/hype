@@ -26,7 +26,7 @@
   - `hype run [--mode <mode>]`
   - `hype db-import --redis-url <redisURL> --file <jsonl> [--force]`
   - `hype db-export --redis-url <redisURL> --pid <pid> --out <out> [--progress-every <n>]`
-  - `hype openclaw spawn -m <moduleId> -s <scheduler> --model <model> --api-key <key> --gateway-token <token> -k <privateKey> [-u <nodeURL>]`
+  - `hype openclaw spawn -m <moduleId> -s <scheduler> --model <model> [--timeout-ms <ms>] --api-key <key> --gateway-token <token> -k <privateKey> [-u <nodeURL>]`
   - `hype openclaw conf-tg -p <pid> --bot-token <token> [--default-account <account>] [--dm-policy <policy>] [--allow-from <value>] -k <privateKey> [-u <nodeURL>]`
   - `hype openclaw pair-tg -p <pid> -c <pairCode> [--channel telegram] [--dm-policy pairing] -k <privateKey> [-u <nodeURL>]`
   - `hype openclaw chat -p <pid> -c <command> -k <privateKey> [-u <nodeURL>]`
@@ -145,6 +145,7 @@
   - `--json`: Print JSON output.
 - Notes:
   - `spawn` requires all of: `--module-id`, `--scheduler`, `--model`, `--api-key`, `--gateway-token`.
+  - `spawn` sets `Container-Env-OPENCLAW_TIMEOUT_MS`; default is `180000`.
   - `conf-tg` requires `--bot-token`; `--default-account` defaults to `main`; `--dm-policy` defaults to `pairing`.
 
 ### Generated Structure

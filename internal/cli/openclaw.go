@@ -57,6 +57,7 @@ func newOpenclawSpawnCmd() *cobra.Command {
 				{Name: "module-id", Prompt: "module-id (-m/--module-id) " + usage_openclaw_module_id + ": "},
 				{Name: "scheduler", Prompt: "scheduler (-s/--scheduler) " + usage_openclaw_scheduler + ": "},
 				{Name: "model", Prompt: "model (--model) " + usage_openclaw_model + ": "},
+				{Name: "timeout-ms", Prompt: "timeout-ms (--timeout-ms) " + usage_openclaw_timeout_ms + " (default 180000): ", Optional: true},
 				{Name: "api-key", Prompt: "api-key (--api-key) " + usage_openclaw_api_key + ": "},
 				{Name: "gateway-token", Prompt: "gateway-token (--gateway-token) " + usage_openclaw_gateway_token + ": "},
 			})
@@ -79,6 +80,10 @@ func newOpenclawSpawnCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			timeoutMs, err := cmd.Flags().GetString("timeout-ms")
+			if err != nil {
+				return err
+			}
 			apiKey, err := cmd.Flags().GetString("api-key")
 			if err != nil {
 				return err
@@ -95,6 +100,9 @@ func newOpenclawSpawnCmd() *cobra.Command {
 			}
 			if strings.TrimSpace(model) == "" {
 				return errors.New("model is required")
+			}
+			if strings.TrimSpace(timeoutMs) == "" {
+				timeoutMs = "180000"
 			}
 			if strings.TrimSpace(apiKey) == "" {
 				return errors.New("api-key is required")
@@ -116,6 +124,7 @@ func newOpenclawSpawnCmd() *cobra.Command {
 			if strings.TrimSpace(gatewayToken) != "" {
 				tags = append(tags, goarSchema.Tag{Name: containerEnvTagPrefix + "OPENCLAW_GATEWAY_TOKEN", Value: gatewayToken})
 			}
+			tags = append(tags, goarSchema.Tag{Name: containerEnvTagPrefix + "OPENCLAW_TIMEOUT_MS", Value: timeoutMs})
 
 			res, err := sdkClient.SpawnAndWait(moduleID, scheduler, tags)
 			if err != nil {
@@ -134,6 +143,7 @@ func newOpenclawSpawnCmd() *cobra.Command {
 	cmd.Flags().StringP("module-id", "m", "", usage_openclaw_module_id)
 	cmd.Flags().StringP("scheduler", "s", "", usage_openclaw_scheduler)
 	cmd.Flags().String("model", "", usage_openclaw_model)
+	cmd.Flags().String("timeout-ms", "180000", usage_openclaw_timeout_ms)
 	cmd.Flags().String("api-key", "", usage_openclaw_api_key)
 	cmd.Flags().String("gateway-token", "", usage_openclaw_gateway_token)
 

@@ -31,6 +31,7 @@ const (
 	usage_openclaw_module_id       = "Openclaw module id"
 	usage_openclaw_scheduler       = "Scheduler address"
 	usage_openclaw_model           = "Model name for spawn"
+	usage_openclaw_timeout_ms      = "Openclaw request timeout in milliseconds"
 	usage_openclaw_api_key         = "Model API key"
 	usage_openclaw_gateway_token   = "Openclaw gateway token"
 	usage_openclaw_pid             = "Process id"
