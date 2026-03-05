@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/everFinance/goether"
@@ -18,7 +19,15 @@ import (
 )
 
 const (
-	containerEnvTagPrefix = "Container-Env-"
+	containerEnvTagPrefix  = "Container-Env-"
+	defaultOpenclawTimeout = "180000"
+	minOpenclawTimeoutMs   = 1000
+	maxOpenclawTimeoutMs   = 3600000
+	maxReplyOutputChars    = 4000
+	maxIDChars             = 256
+	maxModelChars          = 128
+	maxTokenChars          = 8192
+	maxAPIKeyChars         = 4096
 )
 
 type openclawSharedFlags struct {
@@ -57,7 +66,7 @@ func newOpenclawSpawnCmd() *cobra.Command {
 				{Name: "module-id", Prompt: "module-id (-m/--module-id) " + usage_openclaw_module_id + ": "},
 				{Name: "scheduler", Prompt: "scheduler (-s/--scheduler) " + usage_openclaw_scheduler + ": "},
 				{Name: "model", Prompt: "model (--model) " + usage_openclaw_model + ": "},
-				{Name: "timeout-ms", Prompt: "timeout-ms (--timeout-ms) " + usage_openclaw_timeout_ms + " (default 180000): ", Optional: true},
+				{Name: "timeout-ms", Prompt: "timeout-ms (--timeout-ms) " + usage_openclaw_timeout_ms + " (default " + defaultOpenclawTimeout + "): ", Optional: true},
 				{Name: "api-key", Prompt: "api-key (--api-key) " + usage_openclaw_api_key + ": "},
 				{Name: "gateway-token", Prompt: "gateway-token (--gateway-token) " + usage_openclaw_gateway_token + ": "},
 			})
@@ -95,20 +104,42 @@ func newOpenclawSpawnCmd() *cobra.Command {
 			if strings.TrimSpace(moduleID) == "" {
 				return errors.New("module-id is required")
 			}
+			if len(moduleID) > maxIDChars {
+				return fmt.Errorf("module-id is too long (max %d)", maxIDChars)
+			}
 			if strings.TrimSpace(scheduler) == "" {
 				return errors.New("scheduler is required")
+			}
+			if len(scheduler) > maxIDChars {
+				return fmt.Errorf("scheduler is too long (max %d)", maxIDChars)
 			}
 			if strings.TrimSpace(model) == "" {
 				return errors.New("model is required")
 			}
+			if len(model) > maxModelChars {
+				return fmt.Errorf("model is too long (max %d)", maxModelChars)
+			}
 			if strings.TrimSpace(timeoutMs) == "" {
-				timeoutMs = "180000"
+				timeoutMs = defaultOpenclawTimeout
+			}
+			timeout, err := strconv.Atoi(timeoutMs)
+			if err != nil {
+				return fmt.Errorf("timeout-ms must be integer milliseconds: %w", err)
+			}
+			if timeout < minOpenclawTimeoutMs || timeout > maxOpenclawTimeoutMs {
+				return fmt.Errorf("timeout-ms out of range [%d, %d]", minOpenclawTimeoutMs, maxOpenclawTimeoutMs)
 			}
 			if strings.TrimSpace(apiKey) == "" {
 				return errors.New("api-key is required")
 			}
+			if len(apiKey) > maxAPIKeyChars {
+				return fmt.Errorf("api-key is too long (max %d)", maxAPIKeyChars)
+			}
 			if strings.TrimSpace(gatewayToken) == "" {
 				return errors.New("gateway-token is required")
+			}
+			if len(gatewayToken) > maxTokenChars {
+				return fmt.Errorf("gateway-token is too long (max %d)", maxTokenChars)
 			}
 
 			sdkClient, err := newSDK(shared.nodeURL, shared.privateKey)
@@ -143,7 +174,7 @@ func newOpenclawSpawnCmd() *cobra.Command {
 	cmd.Flags().StringP("module-id", "m", "", usage_openclaw_module_id)
 	cmd.Flags().StringP("scheduler", "s", "", usage_openclaw_scheduler)
 	cmd.Flags().String("model", "", usage_openclaw_model)
-	cmd.Flags().String("timeout-ms", "180000", usage_openclaw_timeout_ms)
+	cmd.Flags().String("timeout-ms", defaultOpenclawTimeout, usage_openclaw_timeout_ms)
 	cmd.Flags().String("api-key", "", usage_openclaw_api_key)
 	cmd.Flags().String("gateway-token", "", usage_openclaw_gateway_token)
 
@@ -475,11 +506,11 @@ func replPromptStringFlagWithDefault(cmd *cobra.Command, label, promptKey, defau
 func newSDK(nodeURL, privateKey string) (*sdk.SDK, error) {
 	signer, err := goether.NewSigner(privateKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("newSDK: init signer failed: %w", err)
 	}
 	bundler, err := goar.NewBundler(signer)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("newSDK: init bundler failed: %w", err)
 	}
 	return sdk.NewFromBundler(nodeURL, bundler), nil
 }
@@ -509,10 +540,10 @@ func extractChatReply(raw string) string {
 	}
 
 	if v, ok := result.Output.(string); ok && strings.TrimSpace(v) != "" {
-		return strings.TrimSpace(v)
+		return limitText(strings.TrimSpace(v), maxReplyOutputChars)
 	}
 	if strings.TrimSpace(result.Data) != "" {
-		return strings.TrimSpace(result.Data)
+		return limitText(strings.TrimSpace(result.Data), maxReplyOutputChars)
 	}
 	for _, msg := range result.Messages {
 		if msg == nil {
@@ -520,12 +551,23 @@ func extractChatReply(raw string) string {
 		}
 		for _, t := range msg.Tags {
 			if strings.EqualFold(strings.TrimSpace(t.Name), "Reply") && strings.TrimSpace(t.Value) != "" {
-				return strings.TrimSpace(t.Value)
+				return limitText(strings.TrimSpace(t.Value), maxReplyOutputChars)
 			}
 		}
 		if strings.TrimSpace(msg.Data) != "" {
-			return strings.TrimSpace(msg.Data)
+			return limitText(strings.TrimSpace(msg.Data), maxReplyOutputChars)
 		}
 	}
 	return ""
+}
+
+func limitText(s string, maxChars int) string {
+	if maxChars <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= maxChars {
+		return s
+	}
+	return string(r[:maxChars]) + "...(truncated)"
 }

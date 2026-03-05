@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"bytes"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -96,6 +98,59 @@ func TestExtractChatReplyFallsBackToReplyTag(t *testing.T) {
 	got := extractChatReply(raw)
 	if got != "tag-reply" {
 		t.Fatalf("expected tag reply, got %q", got)
+	}
+}
+
+func TestExtractChatReplyTruncatesLongReply(t *testing.T) {
+	long := strings.Repeat("a", maxReplyOutputChars+10)
+	raw := `{"Output":"` + long + `"}`
+	got := extractChatReply(raw)
+	if !strings.HasSuffix(got, "...(truncated)") {
+		t.Fatalf("expected truncated suffix, got %q", got)
+	}
+}
+
+func TestOpenclawSpawnTimeoutMsValidation(t *testing.T) {
+	err := execOpenclaw(t,
+		"openclaw", "spawn",
+		"-k", "0x1234",
+		"-m", "mod",
+		"-s", "sch",
+		"--model", "m",
+		"--timeout-ms", "500",
+		"--api-key", "key",
+		"--gateway-token", "token",
+	)
+	if err == nil || !strings.Contains(err.Error(), "timeout-ms out of range") {
+		t.Fatalf("expected timeout-ms range error, got: %v", err)
+	}
+}
+
+func TestPrintOpenclawResultJSON(t *testing.T) {
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	done := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		done <- buf.String()
+	}()
+
+	if err := printOpenclawResult(true, map[string]interface{}{"ok": true}, "fallback"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_ = w.Close()
+	out := <-done
+	if !strings.Contains(out, "\"ok\": true") {
+		t.Fatalf("expected json output, got %q", out)
 	}
 }
 

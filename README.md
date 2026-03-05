@@ -141,11 +141,11 @@
   - `chat`: Send a chat message (`Chat`).
 - Shared Flags:
   - `--node-url`, `-u`: Node URL. Default: `http://127.0.0.1:8080`.
-  - `--private-key`, `-k`: Private key; also supports env fallback `HYPE_PRIVATE_KEY` and `PRV_KEY`.
+  - `--private-key`, `-k`: Private key; fallback order is `--private-key` > `HYPE_PRIVATE_KEY` > `PRV_KEY`.
   - `--json`: Print JSON output.
 - Notes:
   - `spawn` requires all of: `--module-id`, `--scheduler`, `--model`, `--api-key`, `--gateway-token`.
-  - `spawn` sets `Container-Env-OPENCLAW_TIMEOUT_MS`; default is `180000`.
+  - `spawn` sets `Container-Env-OPENCLAW_TIMEOUT_MS`; default is `180000`, valid range `[1000, 3600000]`.
   - `conf-tg` requires `--bot-token`; `--default-account` defaults to `main`; `--dm-policy` defaults to `pairing`.
 
 ### Generated Structure
