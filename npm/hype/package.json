@@ -1,0 +1,39 @@
+{
+  "name": "@hymx/hype",
+  "version": "0.0.5",
+  "description": "npm installer for the hype CLI",
+  "license": "MPL-2.0",
+  "homepage": "https://github.com/hymatrix/hype#readme",
+  "bugs": {
+    "url": "https://github.com/hymatrix/hype/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hymatrix/hype.git",
+    "directory": "npm/hype"
+  },
+  "bin": {
+    "hype": "./scripts/hype.js"
+  },
+  "files": [
+    "README.md",
+    "scripts/"
+  ],
+  "scripts": {
+    "postinstall": "node ./scripts/install.js",
+    "test": "node --test ./test/*.test.js",
+    "check-release-assets": "node ./scripts/check-release-assets.js",
+    "verify-release-version": "node ./scripts/verify-release-version.js"
+  },
+  "keywords": [
+    "cli",
+    "hymx",
+    "hype"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

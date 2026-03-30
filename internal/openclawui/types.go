@@ -1,14 +1,20 @@
-package main
+package openclawui
 
-import (
-	"sync"
-	"time"
-)
+import "time"
 
 const (
 	defaultNodeURL = "http://127.0.0.1:8080"
 	defaultListen  = "127.0.0.1:7788"
 )
+
+const defaultCommandTimeout = 90 * time.Second
+
+type Config struct {
+	Listen     string
+	BinaryPath string
+	WorkingDir string
+	Timeout    time.Duration
+}
 
 type healthResponse struct {
 	OK          bool   `json:"ok"`
@@ -58,7 +64,6 @@ type runResult struct {
 }
 
 type spawnStore struct {
-	mu   sync.Mutex
 	pids []string
 }
 
@@ -66,14 +71,10 @@ func (s *spawnStore) add(pid string) {
 	if pid == "" {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.pids = append(s.pids, pid)
 }
 
 func (s *spawnStore) list() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	out := make([]string, len(s.pids))
 	copy(out, s.pids)
 	return out

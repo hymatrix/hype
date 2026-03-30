@@ -4,7 +4,8 @@ version: 2
 
 before:
   hooks:
-    # You may need to run go mod tidy before build
+    - npm ci --prefix ./frontend
+    - npm run build --prefix ./frontend
     - go mod tidy
 
 builds:

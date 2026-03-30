@@ -6,16 +6,34 @@
   - `make build`
   - Output binary: `build/hype`
 - Or use `go` directly:
+  - Build frontend assets first:
+    - `npm --prefix ./frontend ci`
+    - `npm --prefix ./frontend run build`
   - `go build -o build/hype ./cmd/hype`
 
 ## Install
 - From local source:
+  - Build frontend assets first:
+    - `npm --prefix ./frontend ci`
+    - `npm --prefix ./frontend run build`
   - `go install ./cmd/hype`
+  - or use `make install`
 - From GitHub with version:
-  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.4`
+  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.5`
   or
   - `go install github.com/hymatrix/hype/cmd/hype@latest`
+- From npm:
+  - `npm install -g @hymx/hype`
+  - `npx @hymx/hype --version`
 - Ensure `$(go env GOPATH)/bin` (or `GOBIN`) is in your `PATH`.
+- The npm package downloads the matching GitHub Release binary during install.
+- npm distribution currently supports macOS/Linux on `x64` and `arm64`.
+
+## Release Flow
+- Push a `v*` tag to trigger GoReleaser and upload GitHub Release assets.
+- Publishing a GitHub Release triggers npm publish for `@hymx/hype`.
+- The npm publish job verifies that `checksums.txt` and all supported tarballs are reachable before publishing.
+- Configure `NPM_TOKEN` in GitHub Actions secrets for npm publishing.
 
 ## Usage
 - Basic:
@@ -176,19 +194,20 @@ Example spawn with explicit sandbox backend:
 ```
 
 ## Hype Web UI
-- Description: Local Web UI for `hype openclaw` commands (`spawn`, `conf-tg`, `pair-tg`, `chat`).
+- Description: Local Web UI embedded in the `hype` binary for `hype openclaw` commands (`spawn`, `conf-tg`, `pair-tg`, `chat`).
 - Features:
   - Local-only API server (`127.0.0.1:7788`).
-  - Executes `hype openclaw <subcommand> --json`.
+  - Start with `hype ui`.
+  - Executes the current `hype` binary for `openclaw <subcommand> --json`.
   - Displays structured JSON and raw stdout/stderr.
   - Masks sensitive fields in command preview.
   - Keeps secrets in memory only (no localStorage persistence).
-- Binary resolution order:
-  1. `<repo>/build/hype`
-  2. `hype` from `$PATH`
 - Run (single entry):
-  - `./frontend/scripts/start.sh`
+  - `hype ui`
   - Open: `http://127.0.0.1:7788`
+- Run from a repo checkout:
+  - build frontend assets first, then:
+  - `go run ./cmd/hype ui`
 - Run (development):
   - `./frontend/scripts/dev.sh`
   - API: `http://127.0.0.1:7788`
