@@ -1,4 +1,4 @@
-package main
+package openclawui
 
 import (
 	"bytes"
@@ -8,13 +8,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
-
-const defaultCommandTimeout = 90 * time.Second
 
 var errValidation = errors.New("validation failed")
 
@@ -23,29 +19,25 @@ const (
 	runtimeBackendSandbox = "sandbox"
 )
 
-func runOpenclaw(ctx context.Context, repoRoot, subcmd string, req openclawRequest, store *spawnStore) (runResult, error) {
+func runOpenclaw(ctx context.Context, cfg Config, subcmd string, req openclawRequest, store *spawnStore) (runResult, error) {
 	if store == nil {
 		store = &spawnStore{}
 	}
 
 	start := time.Now()
-	binaryPath, err := resolveHypeBinary(repoRoot)
-	if err != nil {
-		return runResult{}, err
-	}
-
 	args, err := buildOpenclawArgs(subcmd, req)
 	if err != nil {
 		return runResult{}, err
 	}
 
-	timeout := commandTimeoutFromEnv()
-	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	runCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(runCtx, binaryPath, args...)
-	cmd.Dir = repoRoot
+	cmd := exec.CommandContext(runCtx, cfg.BinaryPath, args...)
 	cmd.Env = os.Environ()
+	if cfg.WorkingDir != "" {
+		cmd.Dir = cfg.WorkingDir
+	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -55,7 +47,7 @@ func runOpenclaw(ctx context.Context, repoRoot, subcmd string, req openclawReque
 	err = cmd.Run()
 	result := openclawResponse{
 		OK:        err == nil,
-		Command:   maskSensitive(binaryPath, args),
+		Command:   maskSensitive(cfg.BinaryPath, args),
 		StdoutRaw: strings.TrimSpace(stdout.String()),
 		StderrRaw: strings.TrimSpace(stderr.String()),
 	}
@@ -89,7 +81,7 @@ func runOpenclaw(ctx context.Context, repoRoot, subcmd string, req openclawReque
 	result.DurationMS = duration.Milliseconds()
 	result.SpawnedPIDs = store.list()
 
-	return runResult{response: result, duration: duration, binaryRef: binaryPath}, nil
+	return runResult{response: result, duration: duration, binaryRef: cfg.BinaryPath}, nil
 }
 
 func extractSpawnPID(parsed map[string]any) string {
@@ -116,7 +108,6 @@ func parseJSONFromMixedOutput(raw string) (map[string]any, bool) {
 		return direct, true
 	}
 
-	// Handle noisy stdout (e.g. logs before/after JSON payload).
 	left := strings.Index(raw, "{")
 	right := strings.LastIndex(raw, "}")
 	if left >= 0 && right > left {
@@ -343,28 +334,28 @@ func allowFromIncludesWildcard(allowFrom string) bool {
 	return strings.Contains(allowFrom, `"*"`)
 }
 
-func resolveHypeBinary(repoRoot string) (string, error) {
-	preferred := filepath.Join(repoRoot, "build", "hype")
-	if info, err := os.Stat(preferred); err == nil && !info.IsDir() {
-		return preferred, nil
+func readHypeVersions(binaryPath, workingDir string) (string, string) {
+	cmd := exec.Command(binaryPath, "-v")
+	if workingDir != "" {
+		cmd.Dir = workingDir
 	}
-	pathBinary, err := exec.LookPath("hype")
+	out, err := cmd.Output()
 	if err != nil {
-		return "", errors.New("cannot find hype binary, expected build/hype or hype in PATH")
+		return "", ""
 	}
-	return pathBinary, nil
-}
 
-func commandTimeoutFromEnv() time.Duration {
-	v := strings.TrimSpace(os.Getenv("OPENCLAW_WEBUI_TIMEOUT_MS"))
-	if v == "" {
-		return defaultCommandTimeout
+	var hypeVersion string
+	var hymxVersion string
+	for _, line := range strings.Split(string(out), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "Version:") {
+			hypeVersion = strings.TrimSpace(strings.TrimPrefix(trimmed, "Version:"))
+		}
+		if strings.HasPrefix(trimmed, "HymxVersion:") {
+			hymxVersion = strings.TrimSpace(strings.TrimPrefix(trimmed, "HymxVersion:"))
+		}
 	}
-	ms, err := strconv.Atoi(v)
-	if err != nil || ms <= 0 {
-		return defaultCommandTimeout
-	}
-	return time.Duration(ms) * time.Millisecond
+	return hypeVersion, hymxVersion
 }
 
 func maskSensitive(binary string, args []string) []string {

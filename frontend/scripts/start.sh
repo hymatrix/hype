@@ -15,4 +15,4 @@ npm run build
 
 cd "$ROOT_DIR"
 echo "[start] serving on http://127.0.0.1:7788"
-OPENCLAW_WEBUI_LISTEN=127.0.0.1:7788 go run ./frontend/server
+go run ./cmd/hype ui --listen 127.0.0.1:7788

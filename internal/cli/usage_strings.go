@@ -43,4 +43,6 @@ const (
 	usage_openclaw_code            = "Telegram pairing code"
 	usage_openclaw_channel         = "Pairing channel"
 	usage_openclaw_command         = "Chat command text"
+	usage_openclaw_ui_listen       = "Listen address for Openclaw Web UI"
+	usage_openclaw_ui_timeout_ms   = "Command timeout in milliseconds for Openclaw Web UI"
 )
