@@ -1,0 +1,43 @@
+name: npm-publish
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: ${{ !github.event.release.draft && !github.event.release.prerelease && startsWith(github.event.release.tag_name, 'v') }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: npm/hype
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm version matches release tag
+        run: npm run verify-release-version -- ${{ github.event.release.tag_name }}
+
+      - name: Run npm package unit tests
+        run: npm test
+
+      - name: Verify GitHub release assets
+        run: npm run check-release-assets
+
+      - name: Publish npm package
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

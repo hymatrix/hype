@@ -15,7 +15,18 @@
   - `go install github.com/hymatrix/hype/cmd/hype@v0.0.4`
   or
   - `go install github.com/hymatrix/hype/cmd/hype@latest`
+- From npm:
+  - `npm install -g @hymx/hype`
+  - `npx @hymx/hype --version`
 - Ensure `$(go env GOPATH)/bin` (or `GOBIN`) is in your `PATH`.
+- The npm package downloads the matching GitHub Release binary during install.
+- npm distribution currently supports macOS/Linux on `x64` and `arm64`.
+
+## Release Flow
+- Push a `v*` tag to trigger GoReleaser and upload GitHub Release assets.
+- Publishing a GitHub Release triggers npm publish for `@hymx/hype`.
+- The npm publish job verifies that `checksums.txt` and all supported tarballs are reachable before publishing.
+- Configure `NPM_TOKEN` in GitHub Actions secrets for npm publishing.
 
 ## Usage
 - Basic:

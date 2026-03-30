@@ -40,3 +40,5 @@ build
 /.claude
 CLAUDE.md
 hype.skill
+npm/hype/runtime/
+npm/hype/*.tgz
