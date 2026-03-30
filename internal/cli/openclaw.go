@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/everFinance/goether"
@@ -20,14 +19,13 @@ import (
 
 const (
 	containerEnvTagPrefix  = "Container-Env-"
-	defaultOpenclawTimeout = "180000"
-	minOpenclawTimeoutMs   = 1000
-	maxOpenclawTimeoutMs   = 3600000
 	maxReplyOutputChars    = 4000
 	maxIDChars             = 256
 	maxModelChars          = 128
 	maxTokenChars          = 8192
 	maxAPIKeyChars         = 4096
+	openclawRuntimeDocker  = "docker"
+	openclawRuntimeSandbox = "sandbox"
 )
 
 type openclawSharedFlags struct {
@@ -65,10 +63,15 @@ func newOpenclawSpawnCmd() *cobra.Command {
 				{Name: "private-key", Prompt: "private-key (-k/--private-key) " + usage_openclaw_private_key + ": "},
 				{Name: "module-id", Prompt: "module-id (-m/--module-id) " + usage_openclaw_module_id + ": "},
 				{Name: "scheduler", Prompt: "scheduler (-s/--scheduler) " + usage_openclaw_scheduler + ": "},
-				{Name: "model", Prompt: "model (--model) " + usage_openclaw_model + ": "},
-				{Name: "timeout-ms", Prompt: "timeout-ms (--timeout-ms) " + usage_openclaw_timeout_ms + " (default " + defaultOpenclawTimeout + "): ", Optional: true},
-				{Name: "api-key", Prompt: "api-key (--api-key) " + usage_openclaw_api_key + ": "},
+				{Name: "model", Prompt: "model (--model) " + usage_openclaw_model + ": ", Optional: true},
+				{Name: "provider", Prompt: "provider (--provider) " + usage_openclaw_provider + ": ", Optional: true},
+				{Name: "api-key", Prompt: "api-key (--api-key) " + usage_openclaw_api_key + ": ", Optional: true},
 				{Name: "gateway-token", Prompt: "gateway-token (--gateway-token) " + usage_openclaw_gateway_token + ": "},
+				{Name: "runtime-backend", Prompt: "runtime-backend (--runtime-backend) " + usage_openclaw_runtime_backend + ": ", Optional: true},
+				{Name: "bot-token", Prompt: "bot-token (--bot-token) " + usage_openclaw_bot_token + ": ", Optional: true},
+				{Name: "default-account", Prompt: "default-account (--default-account) " + usage_openclaw_default_account + " (default main): ", Optional: true},
+				{Name: "dm-policy", Prompt: "dm-policy (--dm-policy) " + usage_openclaw_dm_policy + " (default open): ", Optional: true},
+				{Name: "allow-from", Prompt: "allow-from (--allow-from) " + usage_openclaw_allow_from + " (default *): ", Optional: true},
 			})
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -89,7 +92,7 @@ func newOpenclawSpawnCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			timeoutMs, err := cmd.Flags().GetString("timeout-ms")
+			provider, err := cmd.Flags().GetString("provider")
 			if err != nil {
 				return err
 			}
@@ -98,6 +101,26 @@ func newOpenclawSpawnCmd() *cobra.Command {
 				return err
 			}
 			gatewayToken, err := cmd.Flags().GetString("gateway-token")
+			if err != nil {
+				return err
+			}
+			runtimeBackend, err := cmd.Flags().GetString("runtime-backend")
+			if err != nil {
+				return err
+			}
+			botToken, err := cmd.Flags().GetString("bot-token")
+			if err != nil {
+				return err
+			}
+			defaultAccount, err := cmd.Flags().GetString("default-account")
+			if err != nil {
+				return err
+			}
+			dmPolicy, err := cmd.Flags().GetString("dm-policy")
+			if err != nil {
+				return err
+			}
+			allowFrom, err := cmd.Flags().GetString("allow-from")
 			if err != nil {
 				return err
 			}
@@ -113,26 +136,10 @@ func newOpenclawSpawnCmd() *cobra.Command {
 			if len(scheduler) > maxIDChars {
 				return fmt.Errorf("scheduler is too long (max %d)", maxIDChars)
 			}
-			if strings.TrimSpace(model) == "" {
-				return errors.New("model is required")
-			}
-			if len(model) > maxModelChars {
+			if len(strings.TrimSpace(model)) > maxModelChars {
 				return fmt.Errorf("model is too long (max %d)", maxModelChars)
 			}
-			if strings.TrimSpace(timeoutMs) == "" {
-				timeoutMs = defaultOpenclawTimeout
-			}
-			timeout, err := strconv.Atoi(timeoutMs)
-			if err != nil {
-				return fmt.Errorf("timeout-ms must be integer milliseconds: %w", err)
-			}
-			if timeout < minOpenclawTimeoutMs || timeout > maxOpenclawTimeoutMs {
-				return fmt.Errorf("timeout-ms out of range [%d, %d]", minOpenclawTimeoutMs, maxOpenclawTimeoutMs)
-			}
-			if strings.TrimSpace(apiKey) == "" {
-				return errors.New("api-key is required")
-			}
-			if len(apiKey) > maxAPIKeyChars {
+			if len(strings.TrimSpace(apiKey)) > maxAPIKeyChars {
 				return fmt.Errorf("api-key is too long (max %d)", maxAPIKeyChars)
 			}
 			if strings.TrimSpace(gatewayToken) == "" {
@@ -148,40 +155,63 @@ func newOpenclawSpawnCmd() *cobra.Command {
 			}
 			defer sdkClient.Close()
 
-			tags := []goarSchema.Tag{{Name: "model", Value: model}}
-			if strings.TrimSpace(apiKey) != "" {
-				tags = append(tags, goarSchema.Tag{Name: "apiKey", Value: apiKey})
+			tags, err := buildOpenclawSpawnTags(model, provider, apiKey, gatewayToken, runtimeBackend)
+			if err != nil {
+				return err
 			}
-			if strings.TrimSpace(gatewayToken) != "" {
-				tags = append(tags, goarSchema.Tag{Name: containerEnvTagPrefix + "OPENCLAW_GATEWAY_TOKEN", Value: gatewayToken})
-			}
-			tags = append(tags, goarSchema.Tag{Name: containerEnvTagPrefix + "OPENCLAW_TIMEOUT_MS", Value: timeoutMs})
 
 			res, err := sdkClient.SpawnAndWait(moduleID, scheduler, tags)
 			if err != nil {
 				return err
 			}
 
-			return printOpenclawResult(shared.jsonOut, map[string]interface{}{
-				"action":      "spawn",
-				"pid":         res.Id,
-				"response_id": res.Id,
-				"message":     res.Message,
-			}, fmt.Sprintf("spawn ok, pid: %s", res.Id))
+			configureTags, shouldConfigureTelegram, err := buildConfigureTelegramTags(botToken, defaultAccount, dmPolicy, allowFrom)
+			if err != nil {
+				return err
+			}
+			configureResponseID := ""
+			configureMessage := ""
+			if shouldConfigureTelegram {
+				configureRes, err := sdkClient.SendMessageAndWait(res.Id, "", configureTags)
+				if err != nil {
+					return err
+				}
+				configureResponseID = configureRes.Id
+				configureMessage = configureRes.Message
+			}
+
+			payload := map[string]interface{}{
+				"action":              "spawn",
+				"pid":                 res.Id,
+				"response_id":         res.Id,
+				"message":             res.Message,
+				"telegram_configured": shouldConfigureTelegram,
+			}
+			fallback := fmt.Sprintf("spawn ok, pid: %s", res.Id)
+			if shouldConfigureTelegram {
+				payload["configure_response_id"] = configureResponseID
+				payload["configure_message"] = configureMessage
+				fallback = fmt.Sprintf("spawn ok, pid: %s; conf-tg ok", res.Id)
+			}
+
+			return printOpenclawResult(shared.jsonOut, payload, fallback)
 		},
 	}
 
 	cmd.Flags().StringP("module-id", "m", "", usage_openclaw_module_id)
 	cmd.Flags().StringP("scheduler", "s", "", usage_openclaw_scheduler)
 	cmd.Flags().String("model", "", usage_openclaw_model)
-	cmd.Flags().String("timeout-ms", defaultOpenclawTimeout, usage_openclaw_timeout_ms)
+	cmd.Flags().String("provider", "", usage_openclaw_provider)
 	cmd.Flags().String("api-key", "", usage_openclaw_api_key)
 	cmd.Flags().String("gateway-token", "", usage_openclaw_gateway_token)
+	cmd.Flags().String("runtime-backend", "", usage_openclaw_runtime_backend)
+	cmd.Flags().String("bot-token", "", usage_openclaw_bot_token)
+	cmd.Flags().String("default-account", "main", usage_openclaw_default_account)
+	cmd.Flags().String("dm-policy", "open", usage_openclaw_dm_policy)
+	cmd.Flags().String("allow-from", "*", usage_openclaw_allow_from)
 
 	_ = cmd.MarkFlagRequired("module-id")
 	_ = cmd.MarkFlagRequired("scheduler")
-	_ = cmd.MarkFlagRequired("model")
-	_ = cmd.MarkFlagRequired("api-key")
 	_ = cmd.MarkFlagRequired("gateway-token")
 	return cmd
 }
@@ -204,7 +234,10 @@ func newOpenclawConfTgCmd() *cobra.Command {
 			if err := replPromptStringFlagWithDefault(cmd, "default-account (--default-account)", "default-account", "main"); err != nil {
 				return err
 			}
-			if err := replPromptStringFlagWithDefault(cmd, "dm-policy (--dm-policy)", "dm-policy", "pairing"); err != nil {
+			if err := replPromptStringFlagWithDefault(cmd, "dm-policy (--dm-policy)", "dm-policy", "open"); err != nil {
+				return err
+			}
+			if err := replPromptStringFlagWithDefault(cmd, "allow-from (--allow-from)", "allow-from", "*"); err != nil {
 				return err
 			}
 			return nil
@@ -230,27 +263,12 @@ func newOpenclawConfTgCmd() *cobra.Command {
 			if strings.TrimSpace(botToken) == "" {
 				return errors.New("bot-token is required")
 			}
-
-			tags := []goarSchema.Tag{{Name: "Action", Value: "ConfigureTelegram"}}
-			patchCount := 0
-			if strings.TrimSpace(botToken) != "" {
-				tags = append(tags, goarSchema.Tag{Name: "botToken", Value: botToken})
-				patchCount++
+			tags, shouldConfigureTelegram, err := buildConfigureTelegramTags(botToken, defaultAccount, dmPolicy, allowFrom)
+			if err != nil {
+				return err
 			}
-			if strings.TrimSpace(defaultAccount) != "" {
-				tags = append(tags, goarSchema.Tag{Name: "defaultAccount", Value: defaultAccount})
-				patchCount++
-			}
-			if strings.TrimSpace(dmPolicy) != "" {
-				tags = append(tags, goarSchema.Tag{Name: "dmPolicy", Value: dmPolicy})
-				patchCount++
-			}
-			if strings.TrimSpace(allowFrom) != "" {
-				tags = append(tags, goarSchema.Tag{Name: "allowFrom", Value: allowFrom})
-				patchCount++
-			}
-			if patchCount == 0 {
-				return errors.New("at least one telegram patch field is required")
+			if !shouldConfigureTelegram {
+				return errors.New("bot-token is required")
 			}
 
 			sdkClient, err := newSDK(shared.nodeURL, shared.privateKey)
@@ -277,7 +295,7 @@ func newOpenclawConfTgCmd() *cobra.Command {
 	cmd.Flags().String("bot-token", "", usage_openclaw_bot_token)
 	cmd.Flags().String("default-account", "main", usage_openclaw_default_account)
 	cmd.Flags().String("dm-policy", "pairing", usage_openclaw_dm_policy)
-	cmd.Flags().String("allow-from", "", usage_openclaw_allow_from)
+	cmd.Flags().String("allow-from", "*", usage_openclaw_allow_from)
 	_ = cmd.MarkFlagRequired("bot-token")
 	return cmd
 }
@@ -472,6 +490,135 @@ func hydrateOpenclawPrivateKeyFlag(cmd *cobra.Command) error {
 		return cmd.Flags().Set("private-key", env)
 	}
 	return nil
+}
+
+func buildOpenclawSpawnTags(model, provider, apiKey, gatewayToken, runtimeBackend string) ([]goarSchema.Tag, error) {
+	model, provider, err := normalizeOpenclawModelProvider(model, provider)
+	if err != nil {
+		return nil, err
+	}
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey != "" && provider == "" {
+		return nil, errors.New("provider is required when api-key is provided and model has no provider prefix")
+	}
+
+	tags := make([]goarSchema.Tag, 0, 8)
+	if provider != "" {
+		tags = append(tags, goarSchema.Tag{Name: "provider", Value: provider})
+	}
+	tags = append(tags,
+		goarSchema.Tag{Name: "model", Value: model},
+		goarSchema.Tag{Name: "apiKey", Value: apiKey},
+		goarSchema.Tag{Name: containerEnvTagPrefix + "OPENCLAW_GATEWAY_TOKEN", Value: gatewayToken},
+	)
+	if model != "" {
+		tags = append(tags, goarSchema.Tag{Name: containerEnvTagPrefix + "OPENCLAW_DEFAULT_MODEL", Value: model})
+	}
+	if provider != "" {
+		tags = append(tags, goarSchema.Tag{Name: containerEnvTagPrefix + "OPENCLAW_DEFAULT_PROVIDER", Value: provider})
+	}
+
+	runtimeBackend = strings.TrimSpace(runtimeBackend)
+	if runtimeBackend != "" {
+		switch runtimeBackend {
+		case openclawRuntimeDocker, openclawRuntimeSandbox:
+			tags = append(tags, goarSchema.Tag{Name: "Runtime-Backend", Value: runtimeBackend})
+		default:
+			return nil, fmt.Errorf("runtime-backend must be one of %q or %q", openclawRuntimeDocker, openclawRuntimeSandbox)
+		}
+	}
+
+	return tags, nil
+}
+
+func normalizeOpenclawModelProvider(model, provider string) (string, string, error) {
+	model = strings.TrimSpace(model)
+	provider = strings.ToLower(strings.TrimSpace(provider))
+
+	prefixedProvider, bareModel := splitModelProvider(model)
+	if prefixedProvider == "" {
+		return model, provider, nil
+	}
+	if provider == "" {
+		return bareModel, prefixedProvider, nil
+	}
+	if provider != prefixedProvider {
+		return "", "", fmt.Errorf("provider %q conflicts with model prefix %q", provider, prefixedProvider)
+	}
+	return bareModel, provider, nil
+}
+
+func splitModelProvider(model string) (string, string) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return "", ""
+	}
+	parts := strings.SplitN(model, "/", 2)
+	if len(parts) != 2 {
+		return "", model
+	}
+	return strings.ToLower(strings.TrimSpace(parts[0])), strings.TrimSpace(parts[1])
+}
+
+func buildConfigureTelegramTags(botToken, defaultAccount, dmPolicy, allowFrom string) ([]goarSchema.Tag, bool, error) {
+	botToken = strings.TrimSpace(botToken)
+	if botToken == "" {
+		return nil, false, nil
+	}
+
+	defaultAccount = strings.TrimSpace(defaultAccount)
+	if defaultAccount == "" {
+		defaultAccount = "main"
+	}
+	dmPolicy = strings.TrimSpace(dmPolicy)
+	if dmPolicy == "" {
+		dmPolicy = "pairing"
+	}
+	allowFrom = strings.TrimSpace(allowFrom)
+	if allowFrom == "" {
+		allowFrom = "*"
+	}
+
+	if err := validateTelegramDMPolicy(dmPolicy, allowFrom); err != nil {
+		return nil, false, err
+	}
+
+	tags := []goarSchema.Tag{
+		{Name: "Action", Value: "ConfigureTelegram"},
+		{Name: "botToken", Value: botToken},
+		{Name: "defaultAccount", Value: defaultAccount},
+		{Name: "dmPolicy", Value: dmPolicy},
+	}
+	if allowFrom != "" {
+		tags = append(tags, goarSchema.Tag{Name: "allowFrom", Value: allowFrom})
+	}
+	return tags, true, nil
+}
+
+func validateTelegramDMPolicy(dmPolicy, allowFrom string) error {
+	if !strings.EqualFold(strings.TrimSpace(dmPolicy), "open") {
+		return nil
+	}
+	if allowFromContainsWildcard(allowFrom) {
+		return nil
+	}
+	return errors.New(`dm-policy=open requires allow-from to include "*"`)
+}
+
+func allowFromContainsWildcard(allowFrom string) bool {
+	allowFrom = strings.TrimSpace(allowFrom)
+	if allowFrom == "" {
+		return false
+	}
+	if allowFrom == "*" {
+		return true
+	}
+	for _, part := range strings.Split(allowFrom, ",") {
+		if strings.TrimSpace(part) == "*" {
+			return true
+		}
+	}
+	return strings.Contains(allowFrom, `"*"`)
 }
 
 func replPromptStringFlagWithDefault(cmd *cobra.Command, label, promptKey, defaultValue string) error {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	goarSchema "github.com/permadao/goar/schema"
 	"github.com/spf13/cobra"
 )
 
@@ -110,19 +111,119 @@ func TestExtractChatReplyTruncatesLongReply(t *testing.T) {
 	}
 }
 
-func TestOpenclawSpawnTimeoutMsValidation(t *testing.T) {
-	err := execOpenclaw(t,
-		"openclaw", "spawn",
-		"-k", "0x1234",
-		"-m", "mod",
-		"-s", "sch",
-		"--model", "m",
-		"--timeout-ms", "500",
-		"--api-key", "key",
-		"--gateway-token", "token",
-	)
-	if err == nil || !strings.Contains(err.Error(), "timeout-ms out of range") {
-		t.Fatalf("expected timeout-ms range error, got: %v", err)
+func TestBuildOpenclawSpawnTagsIncludesOptionalRuntimeFields(t *testing.T) {
+	tags, err := buildOpenclawSpawnTags("gpt-x", "zen", "api-key", "token", "sandbox")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if !hasTag(tags, "provider", "zen") {
+		t.Fatalf("expected provider tag, got %#v", tags)
+	}
+	if !hasTag(tags, "Runtime-Backend", "sandbox") {
+		t.Fatalf("expected Runtime-Backend tag, got %#v", tags)
+	}
+	if !hasTag(tags, "Container-Env-OPENCLAW_DEFAULT_MODEL", "gpt-x") {
+		t.Fatalf("expected default model env tag, got %#v", tags)
+	}
+	if !hasTag(tags, "Container-Env-OPENCLAW_DEFAULT_PROVIDER", "zen") {
+		t.Fatalf("expected default provider env tag, got %#v", tags)
+	}
+}
+
+func TestBuildOpenclawSpawnTagsDefaultsSandboxWorkspace(t *testing.T) {
+	tags, err := buildOpenclawSpawnTags("gpt-x", "", "", "token", "")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if hasTagName(tags, "Runtime-Backend") {
+		t.Fatalf("did not expect Runtime-Backend tag, got %#v", tags)
+	}
+	if !hasTag(tags, "Container-Env-OPENCLAW_DEFAULT_MODEL", "gpt-x") {
+		t.Fatalf("expected default model env tag, got %#v", tags)
+	}
+}
+
+func TestBuildOpenclawSpawnTagsRejectsInvalidRuntimeBackend(t *testing.T) {
+	_, err := buildOpenclawSpawnTags("gpt-x", "zen", "api-key", "token", "podman")
+	if err == nil || !strings.Contains(err.Error(), "runtime-backend must be one of") {
+		t.Fatalf("expected runtime-backend validation error, got %v", err)
+	}
+}
+
+func TestBuildOpenclawSpawnTagsRequiresProviderForAPIKeyWithoutModelPrefix(t *testing.T) {
+	_, err := buildOpenclawSpawnTags("plan", "", "api-key", "token", "")
+	if err == nil || !strings.Contains(err.Error(), "provider is required when api-key is provided") {
+		t.Fatalf("expected provider validation error, got %v", err)
+	}
+}
+
+func TestBuildOpenclawSpawnTagsNormalizesPrefixedModelIntoProvider(t *testing.T) {
+	tags, err := buildOpenclawSpawnTags("opencode-go/kimi-k2.5", "", "api-key", "token", "")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !hasTag(tags, "model", "kimi-k2.5") {
+		t.Fatalf("expected normalized model tag, got %#v", tags)
+	}
+	if !hasTag(tags, "provider", "opencode-go") {
+		t.Fatalf("expected extracted provider tag, got %#v", tags)
+	}
+	if !hasTag(tags, "Container-Env-OPENCLAW_DEFAULT_MODEL", "kimi-k2.5") {
+		t.Fatalf("expected default model env tag, got %#v", tags)
+	}
+	if !hasTag(tags, "Container-Env-OPENCLAW_DEFAULT_PROVIDER", "opencode-go") {
+		t.Fatalf("expected default provider env tag, got %#v", tags)
+	}
+}
+
+func TestBuildOpenclawSpawnTagsRejectsConflictingProviderAndModelPrefix(t *testing.T) {
+	_, err := buildOpenclawSpawnTags("opencode-go/kimi-k2.5", "zen", "api-key", "token", "")
+	if err == nil || !strings.Contains(err.Error(), "conflicts with model prefix") {
+		t.Fatalf("expected provider conflict error, got %v", err)
+	}
+}
+
+func TestValidateTelegramDMPolicyOpenRequiresWildcard(t *testing.T) {
+	err := validateTelegramDMPolicy("open", "")
+	if err == nil || !strings.Contains(err.Error(), `allow-from to include "*"`) {
+		t.Fatalf("expected allow-from wildcard validation error, got %v", err)
+	}
+}
+
+func TestValidateTelegramDMPolicyOpenAcceptsWildcard(t *testing.T) {
+	cases := []string{"*", "*,@alice", `["*","@alice"]`}
+	for _, v := range cases {
+		if err := validateTelegramDMPolicy("open", v); err != nil {
+			t.Fatalf("expected %q to pass, got %v", v, err)
+		}
+	}
+}
+
+func TestBuildConfigureTelegramTagsDefaultsValues(t *testing.T) {
+	tags, shouldConfigureTelegram, err := buildConfigureTelegramTags("bot-token", "", "", "")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !shouldConfigureTelegram {
+		t.Fatal("expected telegram follow-up to be enabled")
+	}
+	if !hasTag(tags, "defaultAccount", "main") || !hasTag(tags, "dmPolicy", "pairing") || !hasTag(tags, "allowFrom", "*") {
+		t.Fatalf("unexpected telegram tags: %#v", tags)
+	}
+}
+
+func TestBuildConfigureTelegramTagsSkipsWhenBotTokenMissing(t *testing.T) {
+	tags, shouldConfigureTelegram, err := buildConfigureTelegramTags("", "main", "open", "*")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if shouldConfigureTelegram {
+		t.Fatal("expected telegram follow-up to be skipped")
+	}
+	if tags != nil {
+		t.Fatalf("expected no tags, got %#v", tags)
 	}
 }
 
@@ -160,4 +261,22 @@ func newOpenclawSharedFlagCmd() *cobra.Command {
 	cmd.Flags().String("private-key", "", "")
 	cmd.Flags().Bool("json", false, "")
 	return cmd
+}
+
+func hasTag(tags []goarSchema.Tag, name, value string) bool {
+	for _, tag := range tags {
+		if tag.Name == name && tag.Value == value {
+			return true
+		}
+	}
+	return false
+}
+
+func hasTagName(tags []goarSchema.Tag, name string) bool {
+	for _, tag := range tags {
+		if tag.Name == name {
+			return true
+		}
+	}
+	return false
 }

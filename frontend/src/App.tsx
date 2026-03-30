@@ -31,9 +31,14 @@ const initialSpawn: SpawnForm = {
   moduleId: '',
   scheduler: '',
   model: '',
-  timeoutMs: '180000',
+  provider: '',
   apiKey: '',
   gatewayToken: '',
+  runtimeBackend: '',
+  botToken: '',
+  defaultAccount: 'main',
+  dmPolicy: 'open',
+  allowFrom: '*',
 }
 
 const initialConfTG: ConfTGForm = {
@@ -41,7 +46,7 @@ const initialConfTG: ConfTGForm = {
   botToken: '',
   defaultAccount: 'main',
   dmPolicy: 'pairing',
-  allowFrom: '',
+  allowFrom: '*',
 }
 
 const initialPairTG: PairTGForm = {
@@ -209,9 +214,21 @@ export function App() {
                 <label>Module ID<input value={spawn.moduleId} onChange={(e) => setSpawn({ ...spawn, moduleId: e.target.value })} /></label>
                 <label>Scheduler<input value={spawn.scheduler} onChange={(e) => setSpawn({ ...spawn, scheduler: e.target.value })} /></label>
                 <label>Model<input value={spawn.model} onChange={(e) => setSpawn({ ...spawn, model: e.target.value })} /></label>
-                <label>Timeout (ms)<input value={spawn.timeoutMs} onChange={(e) => setSpawn({ ...spawn, timeoutMs: e.target.value })} /></label>
+                <label>Provider<input value={spawn.provider} onChange={(e) => setSpawn({ ...spawn, provider: e.target.value })} placeholder="zen" /></label>
                 <label>API Key<input value={spawn.apiKey} onChange={(e) => setSpawn({ ...spawn, apiKey: e.target.value })} /></label>
                 <label>Gateway Token<input value={spawn.gatewayToken} onChange={(e) => setSpawn({ ...spawn, gatewayToken: e.target.value })} /></label>
+                <label>
+                  Runtime Backend
+                  <select value={spawn.runtimeBackend} onChange={(e) => setSpawn({ ...spawn, runtimeBackend: e.target.value })}>
+                    <option value="">auto (let vmdocker choose)</option>
+                    <option value="docker">docker</option>
+                    <option value="sandbox">sandbox</option>
+                  </select>
+                </label>
+                <label>Bot Token (optional auto conf-tg)<input value={spawn.botToken} onChange={(e) => setSpawn({ ...spawn, botToken: e.target.value })} /></label>
+                <label>Default Account<input value={spawn.defaultAccount} onChange={(e) => setSpawn({ ...spawn, defaultAccount: e.target.value })} /></label>
+                <label>DM Policy<input value={spawn.dmPolicy} onChange={(e) => setSpawn({ ...spawn, dmPolicy: e.target.value })} /></label>
+                <label>Allow From<input value={spawn.allowFrom} onChange={(e) => setSpawn({ ...spawn, allowFrom: e.target.value })} /></label>
               </fieldset>
             )}
 
@@ -222,7 +239,7 @@ export function App() {
                 <label>Bot Token<input value={confTG.botToken} onChange={(e) => setConfTG({ ...confTG, botToken: e.target.value })} /></label>
                 <label>Default Account<input value={confTG.defaultAccount} onChange={(e) => setConfTG({ ...confTG, defaultAccount: e.target.value })} /></label>
                 <label>DM Policy<input value={confTG.dmPolicy} onChange={(e) => setConfTG({ ...confTG, dmPolicy: e.target.value })} /></label>
-                <label>Allow From (optional)<input value={confTG.allowFrom} onChange={(e) => setConfTG({ ...confTG, allowFrom: e.target.value })} /></label>
+                <label>Allow From<input value={confTG.allowFrom} onChange={(e) => setConfTG({ ...confTG, allowFrom: e.target.value })} placeholder="*" /></label>
               </fieldset>
             )}
 

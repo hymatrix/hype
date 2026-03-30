@@ -24,9 +24,10 @@ type openclawRequest struct {
 	ModuleID       string `json:"moduleId"`
 	Scheduler      string `json:"scheduler"`
 	Model          string `json:"model"`
-	TimeoutMS      string `json:"timeoutMs"`
+	Provider       string `json:"provider"`
 	APIKey         string `json:"apiKey"`
 	GatewayToken   string `json:"gatewayToken"`
+	RuntimeBackend string `json:"runtimeBackend"`
 	PID            string `json:"pid"`
 	BotToken       string `json:"botToken"`
 	DefaultAccount string `json:"defaultAccount"`

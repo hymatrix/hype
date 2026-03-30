@@ -30,9 +30,14 @@ export type SpawnForm = {
   moduleId: string
   scheduler: string
   model: string
-  timeoutMs: string
+  provider: string
   apiKey: string
   gatewayToken: string
+  runtimeBackend: string
+  botToken: string
+  defaultAccount: string
+  dmPolicy: string
+  allowFrom: string
 }
 
 export type ConfTGForm = {

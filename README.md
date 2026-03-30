@@ -12,7 +12,7 @@
 - From local source:
   - `go install ./cmd/hype`
 - From GitHub with version:
-  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.2`
+  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.4`
   or
   - `go install github.com/hymatrix/hype/cmd/hype@latest`
 - Ensure `$(go env GOPATH)/bin` (or `GOBIN`) is in your `PATH`.
@@ -26,7 +26,7 @@
   - `hype run [--mode <mode>]`
   - `hype db-import --redis-url <redisURL> --file <jsonl> [--force]`
   - `hype db-export --redis-url <redisURL> --pid <pid> --out <out> [--progress-every <n>]`
-  - `hype openclaw spawn -m <moduleId> -s <scheduler> --model <model> [--timeout-ms <ms>] --api-key <key> --gateway-token <token> -k <privateKey> [-u <nodeURL>]`
+  - `hype openclaw spawn -m <moduleId> -s <scheduler> [--model <model>] [--provider <provider>] [--api-key <key>] --gateway-token <token> [--runtime-backend <docker|sandbox>] [--bot-token <token> --default-account <account> --dm-policy <policy> --allow-from <value>] -k <privateKey> [-u <nodeURL>]`
   - `hype openclaw conf-tg -p <pid> --bot-token <token> [--default-account <account>] [--dm-policy <policy>] [--allow-from <value>] -k <privateKey> [-u <nodeURL>]`
   - `hype openclaw pair-tg -p <pid> -c <pairCode> [--channel telegram] [--dm-policy pairing] -k <privateKey> [-u <nodeURL>]`
   - `hype openclaw chat -p <pid> -c <command> -k <privateKey> [-u <nodeURL>]`
@@ -144,9 +144,36 @@
   - `--private-key`, `-k`: Private key; fallback order is `--private-key` > `HYPE_PRIVATE_KEY` > `PRV_KEY`.
   - `--json`: Print JSON output.
 - Notes:
-  - `spawn` requires all of: `--module-id`, `--scheduler`, `--model`, `--api-key`, `--gateway-token`.
-  - `spawn` sets `Container-Env-OPENCLAW_TIMEOUT_MS`; default is `180000`, valid range `[1000, 3600000]`.
-  - `conf-tg` requires `--bot-token`; `--default-account` defaults to `main`; `--dm-policy` defaults to `pairing`.
+  - `spawn` requires `--module-id`, `--scheduler`, `--gateway-token`.
+  - `spawn` tag layout is aligned with `vmdocker/examples/openclaw.go`: optional `provider`, `model`, `apiKey`, `Container-Env-OPENCLAW_GATEWAY_TOKEN`, optional `Runtime-Backend`, plus derived `Container-Env-OPENCLAW_DEFAULT_MODEL` and `Container-Env-OPENCLAW_DEFAULT_PROVIDER`.
+  - `hype` now normalizes `model` and `provider` before sending tags. `model=opencode-go/kimi-k2.5` with empty `provider` is treated the same as `model=kimi-k2.5 --provider opencode-go`.
+  - After normalization, `OPENCLAW_DEFAULT_MODEL` and `OPENCLAW_DEFAULT_PROVIDER` always mirror the effective `model` and `provider`.
+  - If `--api-key` is provided and `--model` has no provider prefix like `zen/...`, then `--provider` is required.
+  - If both `--provider` and a provider-prefixed `--model` are set, they must agree.
+  - `spawn` may set `Runtime-Backend` at spawn time. If omitted, `vmdocker` chooses by OS: macOS prefers `sandbox`, Linux prefers `docker`.
+  - Runtime workspace root is no longer configurable from `hype`; `vmdocker` always uses its default workspace layout.
+  - If `spawn` also receives `--bot-token`, it will immediately send `ConfigureTelegram` to the newly spawned pid.
+  - In this auto-`conf-tg` flow, `--default-account` defaults to `main`, `--dm-policy` defaults to `open`, and `--allow-from` defaults to `*`.
+  - `conf-tg` requires `--bot-token`; `--default-account` defaults to `main`; `--dm-policy` defaults to `pairing`; `--allow-from` defaults to `*`.
+  - Open DM mode still requires `allow-from` to include `*`; the default already satisfies that.
+
+Example spawn with explicit sandbox backend:
+
+```bash
+./build/hype openclaw spawn \
+  --module-id <moduleId> \
+  --scheduler <scheduler> \
+  --model kimi-k2.5 \
+  --provider opencode-go \
+  --api-key <providerApiKey> \
+  --gateway-token openclaw-test-token \
+  --runtime-backend sandbox \
+  --bot-token <telegramBotToken> \
+  --default-account main \
+  --dm-policy open \
+  --allow-from '*' \
+  --private-key <privateKey>
+```
 
 ## Hype Web UI
 - Description: Local Web UI for `hype openclaw` commands (`spawn`, `conf-tg`, `pair-tg`, `chat`).

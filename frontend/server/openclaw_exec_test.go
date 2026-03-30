@@ -9,13 +9,54 @@ import (
 
 func TestBuildOpenclawArgsSpawn(t *testing.T) {
 	req := openclawRequest{
-		NodeURL:      "http://127.0.0.1:8081",
-		PrivateKey:   "0xabc",
+		NodeURL:        "http://127.0.0.1:8081",
+		PrivateKey:     "0xabc",
+		ModuleID:       "mod-1",
+		Scheduler:      "scheduler-1",
+		Model:          "opencode-go/kimi-k2.5",
+		Provider:       "",
+		APIKey:         "api-key",
+		GatewayToken:   "gateway",
+		RuntimeBackend: "sandbox",
+		BotToken:       "bot-token",
+		DefaultAccount: "main",
+		DMPolicy:       "open",
+		AllowFrom:      "*",
+	}
+	args, err := buildOpenclawArgs("spawn", req)
+	if err != nil {
+		t.Fatalf("build args failed: %v", err)
+	}
+
+	has := func(flag, value string) bool {
+		for i := 0; i < len(args)-1; i++ {
+			if args[i] == flag && args[i+1] == value {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !has("--module-id", "mod-1") || !has("--scheduler", "scheduler-1") || !has("--model", "kimi-k2.5") {
+		t.Fatalf("missing required args: %v", args)
+	}
+	if !has("--runtime-backend", "sandbox") {
+		t.Fatalf("missing runtime args: %v", args)
+	}
+	if !has("--provider", "opencode-go") {
+		t.Fatalf("missing normalized provider arg: %v", args)
+	}
+	if !has("--bot-token", "bot-token") || !has("--allow-from", "*") {
+		t.Fatalf("missing telegram follow-up args: %v", args)
+	}
+}
+
+func TestBuildOpenclawArgsSpawnStripsMatchingModelPrefix(t *testing.T) {
+	req := openclawRequest{
 		ModuleID:     "mod-1",
 		Scheduler:    "scheduler-1",
-		Model:        "gpt-x",
-		TimeoutMS:    "180000",
-		APIKey:       "api-key",
+		Model:        "opencode-go/kimi-k2.5",
+		Provider:     "opencode-go",
 		GatewayToken: "gateway",
 	}
 	args, err := buildOpenclawArgs("spawn", req)
@@ -32,8 +73,8 @@ func TestBuildOpenclawArgsSpawn(t *testing.T) {
 		return false
 	}
 
-	if !has("--module-id", "mod-1") || !has("--scheduler", "scheduler-1") || !has("--model", "gpt-x") {
-		t.Fatalf("missing required args: %v", args)
+	if !has("--model", "kimi-k2.5") || !has("--provider", "opencode-go") {
+		t.Fatalf("expected prefixed model to be canonicalized, got %v", args)
 	}
 }
 
@@ -41,6 +82,121 @@ func TestBuildOpenclawArgsValidation(t *testing.T) {
 	_, err := buildOpenclawArgs("chat", openclawRequest{PID: "pid-1"})
 	if err == nil {
 		t.Fatal("expected validation error when command is empty")
+	}
+}
+
+func TestBuildOpenclawArgsSpawnRejectsInvalidRuntimeBackend(t *testing.T) {
+	_, err := buildOpenclawArgs("spawn", openclawRequest{
+		ModuleID:       "mod-1",
+		Scheduler:      "scheduler-1",
+		Model:          "plan",
+		APIKey:         "api-key",
+		GatewayToken:   "gateway",
+		RuntimeBackend: "podman",
+	})
+	if err == nil || !strings.Contains(err.Error(), "runtimeBackend must be empty") {
+		t.Fatalf("expected runtimeBackend validation error, got %v", err)
+	}
+}
+
+func TestBuildOpenclawArgsSpawnRequiresProviderWhenAPIKeyAndPlainModel(t *testing.T) {
+	_, err := buildOpenclawArgs("spawn", openclawRequest{
+		ModuleID:     "mod-1",
+		Scheduler:    "scheduler-1",
+		Model:        "plan",
+		APIKey:       "api-key",
+		GatewayToken: "gateway",
+	})
+	if err == nil || !strings.Contains(err.Error(), "provider is required when apiKey is provided") {
+		t.Fatalf("expected provider validation error, got %v", err)
+	}
+}
+
+func TestBuildOpenclawArgsSpawnDoesNotIncludeSandboxWorkspace(t *testing.T) {
+	args, err := buildOpenclawArgs("spawn", openclawRequest{
+		ModuleID:     "mod-1",
+		Scheduler:    "scheduler-1",
+		GatewayToken: "gateway",
+	})
+	if err != nil {
+		t.Fatalf("build args failed: %v", err)
+	}
+
+	has := func(flag, value string) bool {
+		for i := 0; i < len(args)-1; i++ {
+			if args[i] == flag && args[i+1] == value {
+				return true
+			}
+		}
+		return false
+	}
+
+	if has("--sandbox-workspace", ".") {
+		t.Fatalf("did not expect sandbox workspace arg, got %v", args)
+	}
+}
+
+func TestBuildOpenclawArgsSpawnRejectsConflictingProviderAndModelPrefix(t *testing.T) {
+	_, err := buildOpenclawArgs("spawn", openclawRequest{
+		ModuleID:     "mod-1",
+		Scheduler:    "scheduler-1",
+		Model:        "opencode-go/kimi-k2.5",
+		Provider:     "zen",
+		GatewayToken: "gateway",
+	})
+	if err == nil || !strings.Contains(err.Error(), "conflicts with model prefix") {
+		t.Fatalf("expected provider conflict error, got %v", err)
+	}
+}
+
+func TestBuildOpenclawArgsConfTGDefaultsAllowFromWildcard(t *testing.T) {
+	args, err := buildOpenclawArgs("conf-tg", openclawRequest{
+		PID:      "pid-1",
+		BotToken: "bot-token",
+		DMPolicy: "open",
+	})
+	if err != nil {
+		t.Fatalf("build args failed: %v", err)
+	}
+
+	has := func(flag, value string) bool {
+		for i := 0; i < len(args)-1; i++ {
+			if args[i] == flag && args[i+1] == value {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !has("--allow-from", "*") {
+		t.Fatalf("expected default allow-from arg, got %v", args)
+	}
+}
+
+func TestBuildOpenclawArgsSpawnDefaultsTelegramFollowupValues(t *testing.T) {
+	args, err := buildOpenclawArgs("spawn", openclawRequest{
+		ModuleID:     "mod-1",
+		Scheduler:    "scheduler-1",
+		Model:        "zen/plan",
+		APIKey:       "api-key",
+		GatewayToken: "gateway",
+		BotToken:     "bot-token",
+	})
+	if err != nil {
+		t.Fatalf("build args failed: %v", err)
+	}
+
+	has := func(flag, value string) bool {
+		for i := 0; i < len(args)-1; i++ {
+			if args[i] == flag && args[i+1] == value {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !has("--default-account", "main") || !has("--dm-policy", "open") || !has("--allow-from", "*") {
+		t.Fatalf("expected default telegram follow-up args, got %v", args)
 	}
 }
 

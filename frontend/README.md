@@ -6,6 +6,9 @@ Local Web UI for `hype openclaw` commands: `spawn`, `conf-tg`, `pair-tg`, `chat`
 
 - Local-only API server (`127.0.0.1:7788`)
 - Executes `hype openclaw <subcommand> --json`
+- Spawn form supports `provider` and `runtimeBackend`
+- `defaultModel` / `defaultProvider` are derived automatically from the effective `model` / `provider`
+- Spawn form can also auto-run `conf-tg` after spawn when `botToken` is filled
 - Displays structured JSON + raw stdout/stderr
 - Sensitive fields are masked in displayed command preview
 - In-memory secrets only (no localStorage persistence)

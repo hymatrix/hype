@@ -8,16 +8,15 @@ export const sharedSchema = z.object({
 export const spawnSchema = z.object({
   moduleId: z.string().min(1, 'moduleId is required'),
   scheduler: z.string().min(1, 'scheduler is required'),
-  model: z.string().min(1, 'model is required'),
-  timeoutMs: z
-    .string()
-    .min(1, 'timeoutMs is required')
-    .refine((v) => {
-      const n = Number(v)
-      return Number.isInteger(n) && n >= 1000 && n <= 3600000
-    }, 'timeoutMs must be integer in [1000, 3600000]'),
-  apiKey: z.string().min(1, 'apiKey is required'),
+  model: z.string(),
+  provider: z.string(),
+  apiKey: z.string(),
   gatewayToken: z.string().min(1, 'gatewayToken is required'),
+  runtimeBackend: z.enum(['', 'docker', 'sandbox']),
+  botToken: z.string(),
+  defaultAccount: z.string(),
+  dmPolicy: z.string(),
+  allowFrom: z.string(),
 })
 
 export const confTGSchema = z.object({

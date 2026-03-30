@@ -18,6 +18,11 @@ const defaultCommandTimeout = 90 * time.Second
 
 var errValidation = errors.New("validation failed")
 
+const (
+	runtimeBackendDocker  = "docker"
+	runtimeBackendSandbox = "sandbox"
+)
+
 func runOpenclaw(ctx context.Context, repoRoot, subcmd string, req openclawRequest, store *spawnStore) (runResult, error) {
 	if store == nil {
 		store = &spawnStore{}
@@ -154,27 +159,61 @@ func buildOpenclawArgs(subcmd string, req openclawRequest) ([]string, error) {
 		if err := requireFields(map[string]string{
 			"moduleId":     req.ModuleID,
 			"scheduler":    req.Scheduler,
-			"model":        req.Model,
-			"apiKey":       req.APIKey,
 			"gatewayToken": req.GatewayToken,
 		}); err != nil {
 			return nil, err
 		}
-		timeout := strings.TrimSpace(req.TimeoutMS)
-		if timeout == "" {
-			timeout = "180000"
+		runtimeBackend := strings.TrimSpace(req.RuntimeBackend)
+		if runtimeBackend != "" && runtimeBackend != runtimeBackendDocker && runtimeBackend != runtimeBackendSandbox {
+			return nil, fmt.Errorf("%w: runtimeBackend must be empty, %q, or %q", errValidation, runtimeBackendDocker, runtimeBackendSandbox)
 		}
-		if n, err := strconv.Atoi(timeout); err != nil || n < 1000 || n > 3600000 {
-			return nil, fmt.Errorf("%w: timeoutMs must be in [1000, 3600000]", errValidation)
+		model := strings.TrimSpace(req.Model)
+		provider := strings.TrimSpace(req.Provider)
+		apiKey := strings.TrimSpace(req.APIKey)
+		normalizedModel, normalizedProvider, err := normalizeModelProvider(model, provider)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", errValidation, err)
+		}
+		model = normalizedModel
+		provider = normalizedProvider
+		if apiKey != "" && provider == "" {
+			return nil, fmt.Errorf("%w: provider is required when apiKey is provided and model has no provider prefix", errValidation)
 		}
 		args = append(args,
 			"--module-id", strings.TrimSpace(req.ModuleID),
 			"--scheduler", strings.TrimSpace(req.Scheduler),
-			"--model", strings.TrimSpace(req.Model),
-			"--timeout-ms", timeout,
-			"--api-key", strings.TrimSpace(req.APIKey),
+			"--model", model,
+			"--provider", provider,
+			"--api-key", apiKey,
 			"--gateway-token", strings.TrimSpace(req.GatewayToken),
 		)
+		if runtimeBackend != "" {
+			args = append(args, "--runtime-backend", runtimeBackend)
+		}
+		botToken := strings.TrimSpace(req.BotToken)
+		if botToken != "" {
+			defaultAccount := strings.TrimSpace(req.DefaultAccount)
+			if defaultAccount == "" {
+				defaultAccount = "main"
+			}
+			dmPolicy := strings.TrimSpace(req.DMPolicy)
+			if dmPolicy == "" {
+				dmPolicy = "open"
+			}
+			allowFrom := strings.TrimSpace(req.AllowFrom)
+			if allowFrom == "" {
+				allowFrom = "*"
+			}
+			if err := validateTelegramConfig(dmPolicy, allowFrom); err != nil {
+				return nil, err
+			}
+			args = append(args,
+				"--bot-token", botToken,
+				"--default-account", defaultAccount,
+				"--dm-policy", dmPolicy,
+				"--allow-from", allowFrom,
+			)
+		}
 	case "conf-tg":
 		if err := requireFields(map[string]string{
 			"pid":      req.PID,
@@ -190,15 +229,20 @@ func buildOpenclawArgs(subcmd string, req openclawRequest) ([]string, error) {
 		if dmPolicy == "" {
 			dmPolicy = "pairing"
 		}
+		allowFrom := strings.TrimSpace(req.AllowFrom)
+		if allowFrom == "" {
+			allowFrom = "*"
+		}
+		if err := validateTelegramConfig(dmPolicy, allowFrom); err != nil {
+			return nil, err
+		}
 		args = append(args,
 			"--pid", strings.TrimSpace(req.PID),
 			"--bot-token", strings.TrimSpace(req.BotToken),
 			"--default-account", defaultAccount,
 			"--dm-policy", dmPolicy,
+			"--allow-from", allowFrom,
 		)
-		if allowFrom := strings.TrimSpace(req.AllowFrom); allowFrom != "" {
-			args = append(args, "--allow-from", allowFrom)
-		}
 	case "pair-tg":
 		if err := requireFields(map[string]string{
 			"pid":  req.PID,
@@ -238,6 +282,35 @@ func buildOpenclawArgs(subcmd string, req openclawRequest) ([]string, error) {
 	return args, nil
 }
 
+func normalizeModelProvider(model, provider string) (string, string, error) {
+	model = strings.TrimSpace(model)
+	provider = strings.ToLower(strings.TrimSpace(provider))
+
+	prefixedProvider, bareModel := splitModelProvider(model)
+	if prefixedProvider == "" {
+		return model, provider, nil
+	}
+	if provider == "" {
+		return bareModel, prefixedProvider, nil
+	}
+	if provider != prefixedProvider {
+		return "", "", fmt.Errorf("provider %q conflicts with model prefix %q", provider, prefixedProvider)
+	}
+	return bareModel, provider, nil
+}
+
+func splitModelProvider(model string) (string, string) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return "", ""
+	}
+	parts := strings.SplitN(model, "/", 2)
+	if len(parts) != 2 {
+		return "", model
+	}
+	return strings.ToLower(strings.TrimSpace(parts[0])), strings.TrimSpace(parts[1])
+}
+
 func requireFields(required map[string]string) error {
 	for name, value := range required {
 		if strings.TrimSpace(value) == "" {
@@ -245,6 +318,29 @@ func requireFields(required map[string]string) error {
 		}
 	}
 	return nil
+}
+
+func validateTelegramConfig(dmPolicy, allowFrom string) error {
+	if strings.EqualFold(strings.TrimSpace(dmPolicy), "open") && !allowFromIncludesWildcard(allowFrom) {
+		return fmt.Errorf("%w: dmPolicy=open requires allowFrom to include \"*\"", errValidation)
+	}
+	return nil
+}
+
+func allowFromIncludesWildcard(allowFrom string) bool {
+	allowFrom = strings.TrimSpace(allowFrom)
+	if allowFrom == "" {
+		return false
+	}
+	if allowFrom == "*" {
+		return true
+	}
+	for _, part := range strings.Split(allowFrom, ",") {
+		if strings.TrimSpace(part) == "*" {
+			return true
+		}
+	}
+	return strings.Contains(allowFrom, `"*"`)
 }
 
 func resolveHypeBinary(repoRoot string) (string, error) {
