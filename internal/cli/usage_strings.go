@@ -6,6 +6,10 @@ const (
 
 	usage_get_package = "Go module path of the VMM package"
 
+	usage_vmdocker_version  = "VMDocker release tag"
+	usage_vmdocker_dir      = "Target VMDocker directory"
+	usage_vmdocker_env_file = "Path to the .env file used for examples init"
+
 	usage_vmm_name   = "Name of the vmm"
 	usage_vmm_format = "Module format of the vmm"
 

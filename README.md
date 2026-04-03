@@ -42,6 +42,8 @@
   - `hype mount --name <vmm>`
   - `hype module --name <module> [-u <nodeURL>] [-k <privateKey>]`
   - `hype run [--mode <mode>]`
+  - `hype vmdocker get [--version <tag>] [--dir <path>]`
+  - `hype vmdocker init [--dir <path>] --env-file <path>`
   - `hype db-import --redis-url <redisURL> --file <jsonl> [--force]`
   - `hype db-export --redis-url <redisURL> --pid <pid> --out <out> [--progress-every <n>]`
   - `hype openclaw spawn -m <moduleId> -s <scheduler> [--model <model>] [--provider <provider>] [--api-key <key>] --gateway-token <token> [--runtime-backend <docker|sandbox>] [--bot-token <token> --default-account <account> --dm-policy <policy> --allow-from <value>] -k <privateKey> [-u <nodeURL>]`
@@ -120,6 +122,40 @@
 - Flow:
   - Executes: `cd cmd && go run ./ [--mode <mode>]`
   - From the generated project root, runs the `cmd/main.go` entrypoint.
+
+### Command: vmdocker
+- Description: Fetch and initialize a local `vmdocker` runtime for development.
+- Subcommands:
+  - `get`: clone a `vmdocker` release tag and build `build/hymx-node`
+  - `init`: start Redis, start the built node in daemon mode, wait for health, then run `go run ./examples init`
+
+#### `vmdocker get`
+- Flags:
+  - `--version`: release tag to fetch. If omitted, hype resolves the latest semver tag from the upstream repo.
+  - `--dir`: target clone directory. Default: `./vmdocker`
+- Behavior:
+  - Clones `https://github.com/cryptowizard0/vmdocker.git`
+  - Reuses an existing checkout only if it is already a `vmdocker` repo
+  - Builds `./build/hymx-node`
+- Example:
+  - `hype vmdocker get`
+  - `hype vmdocker get --version v0.0.1 --dir ./_sandbox/vmdocker`
+
+#### `vmdocker init`
+- Flags:
+  - `--dir`: VMDocker checkout directory. Default: `./vmdocker`
+  - `--env-file`: `.env` file used for `examples init`. Required.
+- Behavior:
+  - Requires `<dir>/build/hymx-node` to exist
+  - Starts Redis via Docker container `hype-vmdocker-redis` on port `6379`
+  - Starts the node with `./build/hymx-node start --config ./cmd/config.yaml`
+  - Waits for `http://127.0.0.1:8080/info`
+  - Parses the provided `.env` file and injects it into `go run ./examples init`
+- `.env` requirements:
+  - Must include `VMDOCKER_PRIVATE_KEY`
+  - `VMDOCKER_URL=http://127.0.0.1:8080` is injected automatically
+- Example:
+  - `hype vmdocker init --env-file ./local.env`
 
 ### Command: db-import
 - Description: Import a JSONL data file into Redis, calling IDB.Commit for each item.

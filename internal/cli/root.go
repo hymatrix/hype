@@ -27,6 +27,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newMountCmd())
 	rootCmd.AddCommand(newModuleCmd())
 	rootCmd.AddCommand(newRunCmd())
+	rootCmd.AddCommand(newVmdockerCmd())
 	rootCmd.AddCommand(newDBImportCmd())
 	rootCmd.AddCommand(newExportJSONLCmd())
 	rootCmd.AddCommand(newReplCmd())
