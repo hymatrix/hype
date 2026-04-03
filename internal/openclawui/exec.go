@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	vmdockerpkg "github.com/hymatrix/hype/internal/vmdocker"
 )
 
 var errValidation = errors.New("validation failed")
@@ -25,9 +27,33 @@ func runOpenclaw(ctx context.Context, cfg Config, subcmd string, req openclawReq
 	}
 
 	start := time.Now()
-	args, err := buildOpenclawArgs(subcmd, req)
+	args, cleanup, err := buildCommandArgs("openclaw", subcmd, req)
 	if err != nil {
 		return runResult{}, err
+	}
+	defer cleanup()
+
+	return runCommandWithArgs(ctx, cfg, "openclaw", subcmd, args, store, start)
+}
+
+func runVmdocker(ctx context.Context, cfg Config, subcmd string, req openclawRequest, store *spawnStore) (runResult, error) {
+	if store == nil {
+		store = &spawnStore{}
+	}
+
+	start := time.Now()
+	args, cleanup, err := buildCommandArgs("vmdocker", subcmd, req)
+	if err != nil {
+		return runResult{}, err
+	}
+	defer cleanup()
+
+	return runCommandWithArgs(ctx, cfg, "vmdocker", subcmd, args, store, start)
+}
+
+func runCommandWithArgs(ctx context.Context, cfg Config, root, subcmd string, args []string, store *spawnStore, start time.Time) (runResult, error) {
+	if store == nil {
+		store = &spawnStore{}
 	}
 
 	runCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
@@ -44,18 +70,18 @@ func runOpenclaw(ctx context.Context, cfg Config, subcmd string, req openclawReq
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err = cmd.Run()
+	runErr := cmd.Run()
 	result := openclawResponse{
-		OK:        err == nil,
+		OK:        runErr == nil,
 		Command:   maskSensitive(cfg.BinaryPath, args),
 		StdoutRaw: strings.TrimSpace(stdout.String()),
 		StderrRaw: strings.TrimSpace(stderr.String()),
 	}
 
-	if result.StdoutRaw != "" {
+	if root == "openclaw" && result.StdoutRaw != "" {
 		if parsed, ok := parseJSONFromMixedOutput(result.StdoutRaw); ok {
 			result.ParsedJSON = parsed
-			if subcmd == "spawn" && err == nil {
+			if subcmd == "spawn" && runErr == nil {
 				pid := extractSpawnPID(parsed)
 				if pid != "" {
 					result.SpawnPID = pid
@@ -65,10 +91,10 @@ func runOpenclaw(ctx context.Context, cfg Config, subcmd string, req openclawReq
 		}
 	}
 
-	if err != nil {
-		result.Error = err.Error()
+	if runErr != nil {
+		result.Error = runErr.Error()
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if errors.As(runErr, &exitErr) {
 			result.ExitCode = exitErr.ExitCode()
 		} else {
 			result.ExitCode = 1
@@ -82,6 +108,18 @@ func runOpenclaw(ctx context.Context, cfg Config, subcmd string, req openclawReq
 	result.SpawnedPIDs = store.list()
 
 	return runResult{response: result, duration: duration, binaryRef: cfg.BinaryPath}, nil
+}
+
+func buildCommandArgs(root, subcmd string, req openclawRequest) ([]string, func(), error) {
+	switch root {
+	case "openclaw":
+		args, err := buildOpenclawArgs(subcmd, req)
+		return args, func() {}, err
+	case "vmdocker":
+		return buildVmdockerArgs(subcmd, req)
+	default:
+		return nil, nil, fmt.Errorf("%w: unsupported command root %q", errValidation, root)
+	}
 }
 
 func extractSpawnPID(parsed map[string]any) string {
@@ -132,6 +170,57 @@ func parseJSONFromMixedOutput(raw string) (map[string]any, bool) {
 		}
 	}
 	return nil, false
+}
+
+func buildVmdockerArgs(subcmd string, req openclawRequest) ([]string, func(), error) {
+	dir := strings.TrimSpace(req.Dir)
+	if dir == "" {
+		dir = "./vmdocker"
+	}
+
+	switch subcmd {
+	case "get":
+		args := []string{"vmdocker", "get", "--dir", dir}
+		if version := strings.TrimSpace(req.Version); version != "" {
+			args = append(args, "--version", version)
+		}
+		return args, func() {}, nil
+	case "init":
+		if strings.TrimSpace(req.EnvFileContent) == "" {
+			return nil, nil, fmt.Errorf("%w: envFileContent is required", errValidation)
+		}
+		values, err := vmdockerpkg.ParseEnvContent(req.EnvFileContent)
+		if err != nil {
+			return nil, nil, fmt.Errorf("%w: invalid env file content: %v", errValidation, err)
+		}
+		if strings.TrimSpace(values["VMDOCKER_PRIVATE_KEY"]) == "" {
+			return nil, nil, fmt.Errorf("%w: env file must define VMDOCKER_PRIVATE_KEY", errValidation)
+		}
+
+		tempFile, err := os.CreateTemp("", "hype-vmdocker-*.env")
+		if err != nil {
+			return nil, nil, err
+		}
+
+		cleanup := func() {
+			_ = os.Remove(tempFile.Name())
+		}
+
+		if _, err := tempFile.WriteString(req.EnvFileContent); err != nil {
+			_ = tempFile.Close()
+			cleanup()
+			return nil, nil, err
+		}
+		if err := tempFile.Close(); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+
+		args := []string{"vmdocker", "init", "--dir", dir, "--env-file", tempFile.Name()}
+		return args, cleanup, nil
+	default:
+		return nil, nil, fmt.Errorf("%w: unsupported command %q", errValidation, subcmd)
+	}
 }
 
 func buildOpenclawArgs(subcmd string, req openclawRequest) ([]string, error) {

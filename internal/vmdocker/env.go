@@ -11,8 +11,16 @@ func ParseEnvFile(path string, readFile func(string) ([]byte, error)) (map[strin
 		return nil, err
 	}
 
+	return ParseEnvContent(string(content))
+}
+
+func ParseEnvContent(content string) (map[string]string, error) {
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	return parseEnvScanner(scanner)
+}
+
+func parseEnvScanner(scanner *bufio.Scanner) (map[string]string, error) {
 	values := make(map[string]string)
-	scanner := bufio.NewScanner(strings.NewReader(string(content)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {

@@ -20,8 +20,22 @@ type healthResponse struct {
 	OK          bool   `json:"ok"`
 	HypeBinary  string `json:"hypeBinary"`
 	Listen      string `json:"listen"`
+	WorkingDir  string `json:"workingDir"`
+	VmdockerDir string `json:"vmdockerDir"`
 	HypeVersion string `json:"hypeVersion,omitempty"`
 	HymxVersion string `json:"hymxVersion,omitempty"`
+}
+
+type envLoadRequest struct {
+	Path string `json:"path"`
+}
+
+type envLoadResponse struct {
+	OK       bool   `json:"ok"`
+	FileName string `json:"fileName,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Content  string `json:"content,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
 type openclawRequest struct {
@@ -42,6 +56,10 @@ type openclawRequest struct {
 	Code           string `json:"code"`
 	Channel        string `json:"channel"`
 	Command        string `json:"command"`
+	Dir            string `json:"dir"`
+	Version        string `json:"version"`
+	EnvFileName    string `json:"envFileName"`
+	EnvFileContent string `json:"envFileContent"`
 }
 
 type openclawResponse struct {

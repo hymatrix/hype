@@ -95,6 +95,23 @@ func TestParseEnvFile(t *testing.T) {
 	}
 }
 
+func TestParseEnvContent(t *testing.T) {
+	values, err := ParseEnvContent(strings.Join([]string{
+		"# comment",
+		"VMDOCKER_PRIVATE_KEY='0xdef'",
+		"OPENCLAW_MODEL=plan",
+	}, "\n"))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if values["VMDOCKER_PRIVATE_KEY"] != "0xdef" {
+		t.Fatalf("expected private key to be parsed, got %#v", values)
+	}
+	if values["OPENCLAW_MODEL"] != "plan" {
+		t.Fatalf("expected model to be parsed, got %#v", values)
+	}
+}
+
 func TestGetRejectsNonRepoDirectory(t *testing.T) {
 	dir := t.TempDir()
 	runner := &fakeRunner{
@@ -397,14 +414,14 @@ func TestInitOrchestratesRedisNodeAndExamples(t *testing.T) {
 	if !listener.closed {
 		t.Fatal("expected redis port probe listener to be closed")
 	}
-		expectedCalls := []string{
-			"docker inspect -f {{.State.Running}} hype-vmdocker-redis",
-			"docker run -d --name hype-vmdocker-redis -p 6379:6379 redis:latest",
-			"./hymx-node --config ./config.yaml start",
-		}
-		for _, want := range expectedCalls {
-			if !containsCall(runner.calls, want) {
-				t.Fatalf("expected call %q in %#v", want, runner.calls)
+	expectedCalls := []string{
+		"docker inspect -f {{.State.Running}} hype-vmdocker-redis",
+		"docker run -d --name hype-vmdocker-redis -p 6379:6379 redis:latest",
+		"./hymx-node --config ./config.yaml start",
+	}
+	for _, want := range expectedCalls {
+		if !containsCall(runner.calls, want) {
+			t.Fatalf("expected call %q in %#v", want, runner.calls)
 		}
 	}
 }

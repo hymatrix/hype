@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/hymatrix/hype/internal/openclawui"
@@ -27,19 +30,31 @@ func newOpenclawUICmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			workingDir, err := defaultOpenclawUIWorkingDir()
+			if err != nil {
+				return err
+			}
 
 			cfg, err := openclawui.ResolveConfig(openclawui.Config{
 				Listen:     listen,
 				BinaryPath: binaryPath,
+				WorkingDir: workingDir,
 				Timeout:    time.Duration(timeoutMS) * time.Millisecond,
 			})
 			if err != nil {
 				return err
 			}
 
+			baseCtx := cmd.Context()
+			if baseCtx == nil {
+				baseCtx = context.Background()
+			}
+			ctx, stop := signal.NotifyContext(baseCtx, os.Interrupt, syscall.SIGTERM)
+			defer stop()
+
 			fmt.Fprintf(cmd.OutOrStdout(), "Openclaw UI listening on http://%s\n", cfg.Listen)
 			fmt.Fprintf(cmd.OutOrStdout(), "Using hype binary: %s\n", cfg.BinaryPath)
-			return openclawui.Run(cfg)
+			return openclawui.RunContext(ctx, cfg)
 		},
 	}
 
@@ -65,4 +80,8 @@ func defaultOpenclawUITimeoutMS() int {
 		return 90000
 	}
 	return timeoutMS
+}
+
+func defaultOpenclawUIWorkingDir() (string, error) {
+	return os.Getwd()
 }

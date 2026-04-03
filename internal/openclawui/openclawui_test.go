@@ -1,6 +1,8 @@
 package openclawui
 
 import (
+	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -168,7 +170,10 @@ func TestHealthRouteUsesConfiguredBinary(t *testing.T) {
 	if !strings.Contains(body, `"hypeBinary":"`+binaryPath+`"`) {
 		t.Fatalf("expected binary path in response, got %s", body)
 	}
-	if !strings.Contains(body, `"hypeVersion":"v0.0.5"`) || !strings.Contains(body, `"hymxVersion":"v0.4.8"`) {
+	if !strings.Contains(body, `"workingDir":"`+workingDir+`"`) {
+		t.Fatalf("expected working dir in response, got %s", body)
+	}
+	if !strings.Contains(body, `"hypeVersion":"v0.0.6"`) || !strings.Contains(body, `"hymxVersion":"v0.4.8"`) {
 		t.Fatalf("expected versions in response, got %s", body)
 	}
 }
@@ -202,6 +207,135 @@ func TestChatRouteExecutesCurrentBinary(t *testing.T) {
 	}
 }
 
+func TestVmdockerGetRouteExecutesCurrentBinary(t *testing.T) {
+	workingDir := t.TempDir()
+	binaryPath := writeFakeHypeBinary(t, workingDir)
+
+	handler, err := NewHandler(Config{
+		BinaryPath: binaryPath,
+		WorkingDir: workingDir,
+		Listen:     defaultListen,
+		Timeout:    5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("new handler failed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/vmdocker/get", strings.NewReader(`{"dir":"./sandbox/vmdocker","version":"v0.0.1"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected vmdocker get 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+
+	var body openclawResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response failed: %v", err)
+	}
+	if !body.OK || !strings.Contains(body.StdoutRaw, "vmdocker get ok") {
+		t.Fatalf("unexpected response: %#v", body)
+	}
+	if !strings.Contains(strings.Join(body.Command, " "), "vmdocker get --dir ./sandbox/vmdocker --version v0.0.1") {
+		t.Fatalf("unexpected command: %#v", body.Command)
+	}
+}
+
+func TestEnvLoadRouteReadsFile(t *testing.T) {
+	workingDir := t.TempDir()
+	binaryPath := writeFakeHypeBinary(t, workingDir)
+	envPath := filepath.Join(workingDir, ".env")
+	if err := os.WriteFile(envPath, []byte("VMDOCKER_PRIVATE_KEY=0xabc\n"), 0o644); err != nil {
+		t.Fatalf("write env file failed: %v", err)
+	}
+
+	handler, err := NewHandler(Config{
+		BinaryPath: binaryPath,
+		WorkingDir: workingDir,
+		Listen:     defaultListen,
+		Timeout:    5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("new handler failed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/env/load", strings.NewReader(`{"path":".env"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected env load 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+
+	var body envLoadResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response failed: %v", err)
+	}
+	if !body.OK || body.FileName != ".env" || !strings.Contains(body.Content, "VMDOCKER_PRIVATE_KEY=0xabc") {
+		t.Fatalf("unexpected env load response: %#v", body)
+	}
+}
+
+func TestVmdockerInitRouteWritesTempEnvFileAndCleansUp(t *testing.T) {
+	workingDir := t.TempDir()
+	binaryPath := writeFakeHypeBinary(t, workingDir)
+
+	handler, err := NewHandler(Config{
+		BinaryPath: binaryPath,
+		WorkingDir: workingDir,
+		Listen:     defaultListen,
+		Timeout:    5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("new handler failed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/vmdocker/init", strings.NewReader(`{"dir":"./sandbox/vmdocker","envFileName":"local.env","envFileContent":"VMDOCKER_PRIVATE_KEY=0xabc\nOPENCLAW_PROVIDER=zen\n"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected vmdocker init 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+
+	var body openclawResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response failed: %v", err)
+	}
+	if !body.OK {
+		t.Fatalf("expected ok response, got %#v", body)
+	}
+	if !strings.Contains(body.StdoutRaw, "VMDOCKER_PRIVATE_KEY=0xabc") || !strings.Contains(body.StdoutRaw, "OPENCLAW_PROVIDER=zen") {
+		t.Fatalf("expected env content in stdout, got %q", body.StdoutRaw)
+	}
+	var tempPath string
+	for _, line := range strings.Split(body.StdoutRaw, "\n") {
+		if after, ok := strings.CutPrefix(strings.TrimSpace(line), "TEMP_ENV="); ok {
+			tempPath = after
+			break
+		}
+	}
+	if tempPath == "" {
+		t.Fatalf("expected temp env path in stdout, got %q", body.StdoutRaw)
+	}
+	if _, err := os.Stat(tempPath); !os.IsNotExist(err) {
+		t.Fatalf("expected temp env file to be cleaned up, stat err=%v", err)
+	}
+}
+
+func TestBuildVmdockerArgsValidation(t *testing.T) {
+	_, cleanup, err := buildVmdockerArgs("init", openclawRequest{EnvFileContent: "OPENCLAW_PROVIDER=zen"})
+	if cleanup != nil {
+		cleanup()
+	}
+	if err == nil || !strings.Contains(err.Error(), "VMDOCKER_PRIVATE_KEY") {
+		t.Fatalf("expected missing private key validation error, got %v", err)
+	}
+}
+
 func writeFakeHypeBinary(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -211,7 +345,7 @@ if [ "$1" = "-v" ]; then
 =================================
 ||            HYPE            ||
 =================================
-Version:     v0.0.5
+Version:     v0.0.6
 HymxVersion: v0.4.8
 EOF
   exit 0
@@ -221,6 +355,30 @@ if [ "$1" = "openclaw" ] && [ "$2" = "chat" ]; then
   cat <<'EOF'
 {"action":"chat","response_id":"msg-1","message":"ok"}
 EOF
+  exit 0
+fi
+
+if [ "$1" = "vmdocker" ] && [ "$2" = "get" ]; then
+  echo "vmdocker get ok"
+  exit 0
+fi
+
+if [ "$1" = "vmdocker" ] && [ "$2" = "init" ]; then
+  env_file=""
+  prev=""
+  for arg in "$@"; do
+    if [ "$prev" = "--env-file" ]; then
+      env_file="$arg"
+      break
+    fi
+    prev="$arg"
+  done
+  if [ ! -f "$env_file" ]; then
+    echo "env file missing" >&2
+    exit 1
+  fi
+  cat "$env_file"
+  printf '\nTEMP_ENV=%s\n' "$env_file"
   exit 0
 fi
 
@@ -299,5 +457,49 @@ func TestAssetRouteBodyIsReadable(t *testing.T) {
 	}
 	if len(body) == 0 {
 		t.Fatal("expected non-empty asset body")
+	}
+}
+
+func TestRunContextStopsServerOnCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- RunContext(ctx, Config{
+			BinaryPath: "/bin/echo",
+			WorkingDir: t.TempDir(),
+			Listen:     "127.0.0.1:0",
+			Timeout:    time.Second,
+		})
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("expected clean shutdown, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected RunContext to stop after cancellation")
+	}
+}
+
+func TestSuggestedVmdockerDirPrefersSiblingRepo(t *testing.T) {
+	workspaceDir := t.TempDir()
+	hypeDir := filepath.Join(workspaceDir, "hype")
+	vmdockerDir := filepath.Join(workspaceDir, "vmdocker")
+	if err := os.MkdirAll(hypeDir, 0o755); err != nil {
+		t.Fatalf("mkdir hype failed: %v", err)
+	}
+	if err := os.MkdirAll(vmdockerDir, 0o755); err != nil {
+		t.Fatalf("mkdir vmdocker failed: %v", err)
+	}
+
+	got := suggestedVmdockerDir(hypeDir)
+	if got != vmdockerDir {
+		t.Fatalf("expected sibling vmdocker dir %q, got %q", vmdockerDir, got)
 	}
 }

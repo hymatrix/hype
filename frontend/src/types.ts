@@ -1,14 +1,22 @@
-export type CommandKey = 'spawn' | 'conf-tg' | 'pair-tg' | 'chat'
+export type RootCommand = 'openclaw' | 'vmdocker'
+
+export type OpenclawCommandKey = 'spawn' | 'conf-tg' | 'pair-tg' | 'chat'
+
+export type VmdockerCommandKey = 'get' | 'init'
+
+export type CommandKey = OpenclawCommandKey | VmdockerCommandKey
 
 export type HealthResponse = {
   ok: boolean
   hypeBinary: string
   listen: string
+  workingDir: string
+  vmdockerDir: string
   hypeVersion?: string
   hymxVersion?: string
 }
 
-export type OpenclawResponse = {
+export type CommandResponse = {
   ok: boolean
   exitCode: number
   command: string[]
@@ -58,4 +66,13 @@ export type PairTGForm = {
 export type ChatForm = {
   pid: string
   command: string
+}
+
+export type VmdockerGetForm = {
+  dir: string
+  version: string
+}
+
+export type VmdockerInitForm = {
+  dir: string
 }

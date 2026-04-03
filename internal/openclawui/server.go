@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,6 +41,10 @@ func ResolveConfig(cfg Config) (Config, error) {
 }
 
 func Run(cfg Config) error {
+	return RunContext(context.Background(), cfg)
+}
+
+func RunContext(ctx context.Context, cfg Config) error {
 	cfg, err := ResolveConfig(cfg)
 	if err != nil {
 		return err
@@ -55,8 +60,27 @@ func Run(cfg Config) error {
 		Handler: handler,
 	}
 
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		err := <-errCh
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
 	}
 	return nil
 }
@@ -90,12 +114,59 @@ func registerAPIRoutes(mux *http.ServeMux, cfg Config, store *spawnStore) {
 			OK:          true,
 			HypeBinary:  cfg.BinaryPath,
 			Listen:      cfg.Listen,
+			WorkingDir:  cfg.WorkingDir,
+			VmdockerDir: suggestedVmdockerDir(cfg.WorkingDir),
 			HypeVersion: hypeVersion,
 			HymxVersion: hymxVersion,
 		})
 	})
 
-	handleOpenclaw := func(subcmd string) http.HandlerFunc {
+	mux.HandleFunc("POST /api/env/load", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req envLoadRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, envLoadResponse{
+				OK:    false,
+				Error: "invalid request body: " + err.Error(),
+			})
+			return
+		}
+
+		envPath := strings.TrimSpace(req.Path)
+		if envPath == "" {
+			writeJSON(w, http.StatusBadRequest, envLoadResponse{
+				OK:    false,
+				Error: "path is required",
+			})
+			return
+		}
+		if !filepath.IsAbs(envPath) && strings.TrimSpace(cfg.WorkingDir) != "" {
+			envPath = filepath.Join(cfg.WorkingDir, envPath)
+		}
+		envPath = filepath.Clean(envPath)
+
+		content, err := os.ReadFile(envPath)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, envLoadResponse{
+				OK:    false,
+				Error: err.Error(),
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, envLoadResponse{
+			OK:       true,
+			FileName: filepath.Base(envPath),
+			Path:     envPath,
+			Content:  string(content),
+		})
+	})
+
+	handleCommand := func(root, subcmd string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -111,7 +182,18 @@ func registerAPIRoutes(mux *http.ServeMux, cfg Config, store *spawnStore) {
 				return
 			}
 
-			result, err := runOpenclaw(context.Background(), cfg, subcmd, req, store)
+			var (
+				result runResult
+				err    error
+			)
+			switch root {
+			case "openclaw":
+				result, err = runOpenclaw(r.Context(), cfg, subcmd, req, store)
+			case "vmdocker":
+				result, err = runVmdocker(r.Context(), cfg, subcmd, req, store)
+			default:
+				err = errors.New("unsupported command root")
+			}
 			if err != nil {
 				status := http.StatusBadRequest
 				if !errors.Is(err, errValidation) {
@@ -129,10 +211,12 @@ func registerAPIRoutes(mux *http.ServeMux, cfg Config, store *spawnStore) {
 		}
 	}
 
-	mux.HandleFunc("POST /api/openclaw/spawn", handleOpenclaw("spawn"))
-	mux.HandleFunc("POST /api/openclaw/conf-tg", handleOpenclaw("conf-tg"))
-	mux.HandleFunc("POST /api/openclaw/pair-tg", handleOpenclaw("pair-tg"))
-	mux.HandleFunc("POST /api/openclaw/chat", handleOpenclaw("chat"))
+	mux.HandleFunc("POST /api/openclaw/spawn", handleCommand("openclaw", "spawn"))
+	mux.HandleFunc("POST /api/openclaw/conf-tg", handleCommand("openclaw", "conf-tg"))
+	mux.HandleFunc("POST /api/openclaw/pair-tg", handleCommand("openclaw", "pair-tg"))
+	mux.HandleFunc("POST /api/openclaw/chat", handleCommand("openclaw", "chat"))
+	mux.HandleFunc("POST /api/vmdocker/get", handleCommand("vmdocker", "get"))
+	mux.HandleFunc("POST /api/vmdocker/init", handleCommand("vmdocker", "init"))
 }
 
 func registerStaticRoutes(mux *http.ServeMux, distFS fs.FS, indexHTML []byte) {
@@ -172,4 +256,23 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func suggestedVmdockerDir(workingDir string) string {
+	workingDir = strings.TrimSpace(workingDir)
+	if workingDir == "" {
+		return "./vmdocker"
+	}
+
+	siblingDir := filepath.Join(filepath.Dir(workingDir), "vmdocker")
+	if info, err := os.Stat(siblingDir); err == nil && info.IsDir() {
+		return siblingDir
+	}
+
+	localDir := filepath.Join(workingDir, "vmdocker")
+	if info, err := os.Stat(localDir); err == nil && info.IsDir() {
+		return localDir
+	}
+
+	return "./vmdocker"
 }

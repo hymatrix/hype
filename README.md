@@ -19,7 +19,7 @@
   - `go install ./cmd/hype`
   - or use `make install`
 - From GitHub with version:
-  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.5`
+  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.6`
   or
   - `go install github.com/hymatrix/hype/cmd/hype@latest`
 - From npm:
@@ -230,17 +230,24 @@ Example spawn with explicit sandbox backend:
 ```
 
 ## Hype Web UI
-- Description: Local Web UI embedded in the `hype` binary for `hype openclaw` commands (`spawn`, `conf-tg`, `pair-tg`, `chat`).
+- Description: Local Web UI embedded in the `hype` binary for `hype openclaw` commands (`spawn`, `conf-tg`, `pair-tg`, `chat`) and `hype vmdocker` commands (`get`, `init`).
 - Features:
   - Local-only API server (`127.0.0.1:7788`).
   - Start with `hype ui`.
-  - Executes the current `hype` binary for `openclaw <subcommand> --json`.
+  - Executes the current `hype` binary for `openclaw` and `vmdocker` subcommands.
   - Displays structured JSON and raw stdout/stderr.
   - Masks sensitive fields in command preview.
   - Keeps secrets in memory only (no localStorage persistence).
+  - Imports a local `.env` file in memory by file picker or explicit path, prefills matching Openclaw fields, and uses it for `vmdocker init`.
+  - `View Env` opens a modal showing every imported env entry.
+  - `.env` import prefills `openclaw spawn` fields including `moduleId`, `scheduler` (`VMDOCKER_SCHEDULER`), `model`, `provider`, `apiKey`, and Telegram settings.
+  - UI-relative paths are resolved from the current working directory used to start `hype ui`.
 - Run (single entry):
   - `hype ui`
   - Open: `http://127.0.0.1:7788`
+- Relative path note:
+  - If you start with `cd build && ./hype ui`, paths such as `./.env` and `./vmdocker` resolve under `build/`.
+  - If you start with `cd /path/to/hype && ./build/hype ui`, the same paths resolve under the repo root.
 - Run from a repo checkout:
   - build frontend assets first, then:
   - `go run ./cmd/hype ui`

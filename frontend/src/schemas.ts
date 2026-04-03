@@ -38,3 +38,12 @@ export const chatSchema = z.object({
   pid: z.string().min(1, 'pid is required'),
   command: z.string().min(1, 'command is required'),
 })
+
+export const vmdockerGetSchema = z.object({
+  dir: z.string().min(1, 'dir is required'),
+  version: z.string(),
+})
+
+export const vmdockerInitSchema = z.object({
+  dir: z.string().min(1, 'dir is required'),
+})
