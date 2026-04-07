@@ -121,6 +121,21 @@ func registerAPIRoutes(mux *http.ServeMux, cfg Config, store *spawnStore) {
 		})
 	})
 
+	mux.HandleFunc("GET /api/catalog", func(w http.ResponseWriter, r *http.Request) {
+		roots, err := buildCatalog()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"ok":    false,
+				"error": err.Error(),
+			})
+			return
+		}
+		writeJSON(w, http.StatusOK, catalogResponse{
+			OK:    true,
+			Roots: roots,
+		})
+	})
+
 	mux.HandleFunc("POST /api/env/load", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -210,6 +225,39 @@ func registerAPIRoutes(mux *http.ServeMux, cfg Config, store *spawnStore) {
 			writeJSON(w, http.StatusOK, result.response)
 		}
 	}
+
+	mux.HandleFunc("POST /api/run", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req runRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, openclawResponse{
+				OK:      false,
+				Error:   "invalid request body: " + err.Error(),
+				Command: []string{},
+			})
+			return
+		}
+
+		result, err := runCatalogCommand(r.Context(), cfg, req, store)
+		if err != nil {
+			status := http.StatusBadRequest
+			if !errors.Is(err, errValidation) {
+				status = http.StatusInternalServerError
+			}
+			writeJSON(w, status, openclawResponse{
+				OK:          false,
+				Error:       err.Error(),
+				Command:     []string{},
+				SpawnedPIDs: store.list(),
+			})
+			return
+		}
+		writeJSON(w, http.StatusOK, result.response)
+	})
 
 	mux.HandleFunc("POST /api/openclaw/spawn", handleCommand("openclaw", "spawn"))
 	mux.HandleFunc("POST /api/openclaw/conf-tg", handleCommand("openclaw", "conf-tg"))

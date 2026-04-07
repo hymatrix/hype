@@ -1,11 +1,3 @@
-export type RootCommand = 'openclaw' | 'vmdocker'
-
-export type OpenclawCommandKey = 'spawn' | 'conf-tg' | 'pair-tg' | 'chat'
-
-export type VmdockerCommandKey = 'get' | 'init'
-
-export type CommandKey = OpenclawCommandKey | VmdockerCommandKey
-
 export type HealthResponse = {
   ok: boolean
   hypeBinary: string
@@ -29,50 +21,60 @@ export type CommandResponse = {
   durationMs: number
 }
 
-export type SharedForm = {
-  nodeUrl: string
-  privateKey: string
+export type CatalogOption = {
+  label: string
+  value: string
 }
 
-export type SpawnForm = {
-  moduleId: string
-  scheduler: string
-  model: string
-  provider: string
-  apiKey: string
-  gatewayToken: string
-  runtimeBackend: string
-  botToken: string
-  defaultAccount: string
-  dmPolicy: string
-  allowFrom: string
+export type CatalogFieldKind = 'string' | 'multiline' | 'bool' | 'int' | 'int64' | 'enum' | 'path' | 'secret'
+
+export type CatalogField = {
+  name: string
+  label: string
+  description?: string
+  kind: CatalogFieldKind
+  defaultValue?: string
+  required?: boolean
+  options?: CatalogOption[]
+  envKeys?: string[]
+  group?: string
 }
 
-export type ConfTGForm = {
-  pid: string
-  botToken: string
-  defaultAccount: string
-  dmPolicy: string
-  allowFrom: string
+export type CatalogCommand = {
+  name: string
+  title: string
+  path: string[]
+  description?: string
+  supported: boolean
+  disabledReason?: string
+  importedEnvRequired?: boolean
+  fields: CatalogField[]
 }
 
-export type PairTGForm = {
-  pid: string
-  code: string
-  channel: string
-  dmPolicy: string
+export type CatalogRoot = {
+  name: string
+  title: string
+  description?: string
+  commands: CatalogCommand[]
 }
 
-export type ChatForm = {
-  pid: string
-  command: string
+export type CatalogResponse = {
+  ok: boolean
+  roots: CatalogRoot[]
 }
 
-export type VmdockerGetForm = {
-  dir: string
-  version: string
+export type ImportedEnvState = {
+  fileName: string
+  sourcePath?: string
+  content: string
+  values: Record<string, string>
 }
 
-export type VmdockerInitForm = {
-  dir: string
+export type RunRequest = {
+  path: string[]
+  values: Record<string, string | boolean>
+  importedEnv?: {
+    fileName: string
+    content: string
+  }
 }

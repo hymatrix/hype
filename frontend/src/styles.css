@@ -286,6 +286,40 @@ body {
   min-width: 0;
 }
 
+.form-column {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.command-head {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.command-head h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.command-head p:last-child {
+  margin-bottom: 0;
+  color: var(--muted);
+}
+
+.unsupported-card {
+  border: 1px solid rgba(248, 113, 113, 0.24);
+  border-radius: 14px;
+  padding: 16px;
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.unsupported-card h3 {
+  margin-top: 0;
+}
+
 .result-column {
   display: grid;
   gap: 12px;
@@ -370,6 +404,16 @@ label {
   display: grid;
   gap: 6px;
   font-size: 0.9rem;
+}
+
+.checkbox-field {
+  grid-template-columns: auto;
+}
+
+.checkbox-field input {
+  width: 20px;
+  min-height: 20px;
+  margin: 0;
 }
 
 input,

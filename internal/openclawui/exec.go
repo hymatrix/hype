@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -49,6 +50,48 @@ func runVmdocker(ctx context.Context, cfg Config, subcmd string, req openclawReq
 	defer cleanup()
 
 	return runCommandWithArgs(ctx, cfg, "vmdocker", subcmd, args, store, start)
+}
+
+func runCatalogCommand(ctx context.Context, cfg Config, req runRequest, store *spawnStore) (runResult, error) {
+	if store == nil {
+		store = &spawnStore{}
+	}
+
+	path := normalizePath(req.Path)
+	if len(path) == 0 {
+		return runResult{}, fmt.Errorf("%w: command path is required", errValidation)
+	}
+
+	roots, err := buildCatalog()
+	if err != nil {
+		return runResult{}, err
+	}
+	command := findCatalogCommand(roots, path)
+	if command == nil {
+		return runResult{}, fmt.Errorf("%w: unsupported command path %q", errValidation, strings.Join(path, " "))
+	}
+	if !command.Supported {
+		return runResult{}, fmt.Errorf("%w: %s", errValidation, command.DisabledReason)
+	}
+
+	values := req.Values
+	if values == nil {
+		values = map[string]any{}
+	}
+
+	start := time.Now()
+	args, cleanup, err := buildArgsForPath(path, values, req.ImportedEnv, *command)
+	if err != nil {
+		return runResult{}, err
+	}
+	defer cleanup()
+
+	root := path[0]
+	subcmd := ""
+	if len(path) > 1 {
+		subcmd = path[1]
+	}
+	return runCommandWithArgs(ctx, cfg, root, subcmd, args, store, start)
 }
 
 func runCommandWithArgs(ctx context.Context, cfg Config, root, subcmd string, args []string, store *spawnStore, start time.Time) (runResult, error) {
@@ -119,6 +162,197 @@ func buildCommandArgs(root, subcmd string, req openclawRequest) ([]string, func(
 		return buildVmdockerArgs(subcmd, req)
 	default:
 		return nil, nil, fmt.Errorf("%w: unsupported command root %q", errValidation, root)
+	}
+}
+
+func buildArgsForPath(path []string, values map[string]any, importedEnv *importedEnvPayload, command catalogCommand) ([]string, func(), error) {
+	root := path[0]
+	if root == "openclaw" {
+		subcmd := ""
+		if len(path) > 1 {
+			subcmd = path[1]
+		}
+		args, err := buildOpenclawArgs(subcmd, buildOpenclawRequest(values, importedEnv))
+		return args, func() {}, err
+	}
+	if root == "vmdocker" {
+		subcmd := ""
+		if len(path) > 1 {
+			subcmd = path[1]
+		}
+		return buildVmdockerArgs(subcmd, buildOpenclawRequest(values, importedEnv))
+	}
+
+	if !command.Supported {
+		return nil, nil, fmt.Errorf("%w: %s", errValidation, command.DisabledReason)
+	}
+	if command.ImportedEnvRequired && (importedEnv == nil || strings.TrimSpace(importedEnv.Content) == "") {
+		return nil, nil, fmt.Errorf("%w: imported env is required", errValidation)
+	}
+
+	args := make([]string, 0, len(path)+len(command.Fields)*2)
+	args = append(args, path...)
+
+	for _, field := range command.Fields {
+		raw, exists := values[field.Name]
+		if field.Required && isEmptyFieldValue(raw, field.Kind) {
+			return nil, nil, fmt.Errorf("%w: %s is required", errValidation, field.Name)
+		}
+		if !exists {
+			continue
+		}
+
+		flagValues, err := serializeFieldValue(field, raw)
+		if err != nil {
+			return nil, nil, fmt.Errorf("%w: %s", errValidation, err.Error())
+		}
+		if len(flagValues) == 0 {
+			continue
+		}
+		args = append(args, "--"+field.Name)
+		args = append(args, flagValues...)
+	}
+
+	return args, func() {}, nil
+}
+
+func buildOpenclawRequest(values map[string]any, importedEnv *importedEnvPayload) openclawRequest {
+	req := openclawRequest{
+		NodeURL:        stringValue(values["node-url"]),
+		PrivateKey:     stringValue(values["private-key"]),
+		ModuleID:       stringValue(values["module-id"]),
+		Scheduler:      stringValue(values["scheduler"]),
+		Model:          stringValue(values["model"]),
+		Provider:       stringValue(values["provider"]),
+		APIKey:         stringValue(values["api-key"]),
+		GatewayToken:   stringValue(values["gateway-token"]),
+		RuntimeBackend: stringValue(values["runtime-backend"]),
+		PID:            stringValue(values["pid"]),
+		BotToken:       stringValue(values["bot-token"]),
+		DefaultAccount: stringValue(values["default-account"]),
+		DMPolicy:       stringValue(values["dm-policy"]),
+		AllowFrom:      stringValue(values["allow-from"]),
+		Code:           stringValue(values["code"]),
+		Channel:        stringValue(values["channel"]),
+		Command:        stringValue(values["command"]),
+		Dir:            stringValue(values["dir"]),
+		Version:        stringValue(values["version"]),
+	}
+	if importedEnv != nil {
+		req.EnvFileName = importedEnv.FileName
+		req.EnvFileContent = importedEnv.Content
+	}
+	return req
+}
+
+func normalizePath(path []string) []string {
+	out := make([]string, 0, len(path))
+	for _, part := range path {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return out
+}
+
+func isEmptyFieldValue(value any, kind string) bool {
+	switch kind {
+	case "bool":
+		return false
+	default:
+		return strings.TrimSpace(stringValue(value)) == ""
+	}
+}
+
+func serializeFieldValue(field catalogField, raw any) ([]string, error) {
+	switch field.Kind {
+	case "bool":
+		value, err := boolValue(raw)
+		if err != nil {
+			return nil, err
+		}
+		if !value {
+			return nil, nil
+		}
+		return []string{"true"}, nil
+	case "int":
+		value, err := intValue(raw, 32)
+		if err != nil {
+			return nil, fmt.Errorf("%s must be an integer", field.Name)
+		}
+		return []string{strconv.FormatInt(value, 10)}, nil
+	case "int64":
+		value, err := intValue(raw, 64)
+		if err != nil {
+			return nil, fmt.Errorf("%s must be an integer", field.Name)
+		}
+		return []string{strconv.FormatInt(value, 10)}, nil
+	default:
+		value := strings.TrimSpace(stringValue(raw))
+		if value == "" {
+			return nil, nil
+		}
+		return []string{value}, nil
+	}
+}
+
+func stringValue(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return typed
+	case json.Number:
+		return typed.String()
+	case fmt.Stringer:
+		return typed.String()
+	case float64:
+		return strconv.FormatFloat(typed, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(typed), 'f', -1, 32)
+	case int:
+		return strconv.Itoa(typed)
+	case int64:
+		return strconv.FormatInt(typed, 10)
+	case int32:
+		return strconv.FormatInt(int64(typed), 10)
+	case bool:
+		return strconv.FormatBool(typed)
+	default:
+		return fmt.Sprint(typed)
+	}
+}
+
+func boolValue(value any) (bool, error) {
+	switch typed := value.(type) {
+	case bool:
+		return typed, nil
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return false, nil
+		}
+		return strconv.ParseBool(strings.TrimSpace(typed))
+	default:
+		return strconv.ParseBool(stringValue(value))
+	}
+}
+
+func intValue(value any, bitSize int) (int64, error) {
+	switch typed := value.(type) {
+	case float64:
+		return int64(typed), nil
+	case float32:
+		return int64(typed), nil
+	case int:
+		return int64(typed), nil
+	case int64:
+		return typed, nil
+	case json.Number:
+		return typed.Int64()
+	default:
+		return strconv.ParseInt(strings.TrimSpace(stringValue(value)), 10, bitSize)
 	}
 }
 

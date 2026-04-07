@@ -1,6 +1,10 @@
 package openclawui
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/cobra"
+)
 
 const (
 	defaultNodeURL = "http://127.0.0.1:8080"
@@ -36,6 +40,59 @@ type envLoadResponse struct {
 	Path     string `json:"path,omitempty"`
 	Content  string `json:"content,omitempty"`
 	Error    string `json:"error,omitempty"`
+}
+
+type catalogFactory func() *cobra.Command
+
+type catalogResponse struct {
+	OK    bool          `json:"ok"`
+	Roots []catalogRoot `json:"roots"`
+}
+
+type catalogRoot struct {
+	Name        string           `json:"name"`
+	Title       string           `json:"title"`
+	Description string           `json:"description,omitempty"`
+	Commands    []catalogCommand `json:"commands"`
+}
+
+type catalogCommand struct {
+	Name                string         `json:"name"`
+	Title               string         `json:"title"`
+	Path                []string       `json:"path"`
+	Description         string         `json:"description,omitempty"`
+	Supported           bool           `json:"supported"`
+	DisabledReason      string         `json:"disabledReason,omitempty"`
+	ImportedEnvRequired bool           `json:"importedEnvRequired,omitempty"`
+	Fields              []catalogField `json:"fields"`
+}
+
+type catalogField struct {
+	Name         string        `json:"name"`
+	Label        string        `json:"label"`
+	Description  string        `json:"description,omitempty"`
+	Kind         string        `json:"kind"`
+	DefaultValue string        `json:"defaultValue,omitempty"`
+	Required     bool          `json:"required,omitempty"`
+	Options      []fieldOption `json:"options,omitempty"`
+	EnvKeys      []string      `json:"envKeys,omitempty"`
+	Group        string        `json:"group,omitempty"`
+}
+
+type fieldOption struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+type importedEnvPayload struct {
+	FileName string `json:"fileName,omitempty"`
+	Content  string `json:"content,omitempty"`
+}
+
+type runRequest struct {
+	Path        []string            `json:"path"`
+	Values      map[string]any      `json:"values"`
+	ImportedEnv *importedEnvPayload `json:"importedEnv,omitempty"`
 }
 
 type openclawRequest struct {

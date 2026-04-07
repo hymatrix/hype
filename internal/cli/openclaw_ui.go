@@ -25,6 +25,7 @@ func newOpenclawUICmd() *cobra.Command {
 			if timeoutMS <= 0 {
 				return fmt.Errorf("timeout-ms must be greater than 0")
 			}
+			openclawui.SetCommandCatalogFactory(NewRootCmd)
 
 			binaryPath, err := os.Executable()
 			if err != nil {

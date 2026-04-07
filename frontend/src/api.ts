@@ -1,4 +1,4 @@
-import type { CommandKey, CommandResponse, HealthResponse, RootCommand } from './types'
+import type { CatalogResponse, CommandResponse, HealthResponse, RunRequest } from './types'
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const response = await fetch('/api/health')
@@ -6,6 +6,15 @@ export async function fetchHealth(): Promise<HealthResponse> {
     throw new Error(`health request failed: ${response.status}`)
   }
   return response.json()
+}
+
+export async function fetchCatalog(): Promise<CatalogResponse> {
+  const response = await fetch('/api/catalog')
+  const data = (await response.json()) as CatalogResponse & { error?: string }
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error || `catalog request failed: ${response.status}`)
+  }
+  return data
 }
 
 export async function loadEnvFile(path: string): Promise<{ fileName: string; path: string; content: string }> {
@@ -32,12 +41,8 @@ export async function loadEnvFile(path: string): Promise<{ fileName: string; pat
   }
 }
 
-export async function runCommand(
-  rootCommand: RootCommand,
-  command: CommandKey,
-  body: Record<string, string>,
-): Promise<CommandResponse> {
-  const response = await fetch(`/api/${rootCommand}/${command}`, {
+export async function runCommand(body: RunRequest): Promise<CommandResponse> {
+  const response = await fetch('/api/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

@@ -1,46 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
-import { fetchHealth, loadEnvFile, runCommand } from './api'
+import { fetchCatalog, fetchHealth, loadEnvFile, runCommand } from './api'
 import { firstEnvValue, parseEnvContent } from './env'
-import {
-  chatSchema,
-  confTGSchema,
-  pairTGSchema,
-  sharedSchema,
-  spawnSchema,
-  vmdockerGetSchema,
-  vmdockerInitSchema,
-} from './schemas'
 import type {
-  ChatForm,
+  CatalogCommand,
+  CatalogField,
+  CatalogRoot,
   CommandResponse,
-  ConfTGForm,
   HealthResponse,
-  OpenclawCommandKey,
-  PairTGForm,
-  RootCommand,
-  SharedForm,
-  SpawnForm,
-  VmdockerCommandKey,
-  VmdockerGetForm,
-  VmdockerInitForm,
+  ImportedEnvState,
+  RunRequest,
 } from './types'
-
-const rootCommands: RootCommand[] = ['openclaw', 'vmdocker']
-const openclawCommands: OpenclawCommandKey[] = ['spawn', 'conf-tg', 'pair-tg', 'chat']
-const vmdockerCommands: VmdockerCommandKey[] = ['get', 'init']
-
-const openclawCommandLabels: Record<OpenclawCommandKey, string> = {
-  spawn: 'spawn',
-  'conf-tg': 'conf-tg',
-  'pair-tg': 'pair-tg',
-  chat: 'chat',
-}
-
-const vmdockerCommandLabels: Record<VmdockerCommandKey, string> = {
-  get: 'get',
-  init: 'init',
-}
 
 const importedEnvPreviewKeys = [
   'VMDOCKER_PRIVATE_KEY',
@@ -50,74 +20,17 @@ const importedEnvPreviewKeys = [
   'OPENCLAW_API_KEY',
   'OPENCLAW_GATEWAY_TOKEN',
   'OPENCLAW_TELEGRAM_BOT_TOKEN',
+  'REDIS_URL',
 ] as const
 
-const initialShared: SharedForm = {
-  nodeUrl: 'http://127.0.0.1:8080',
-  privateKey: '',
-}
-
-const initialSpawn: SpawnForm = {
-  moduleId: '',
-  scheduler: '',
-  model: '',
-  provider: '',
-  apiKey: '',
-  gatewayToken: '',
-  runtimeBackend: '',
-  botToken: '',
-  defaultAccount: 'main',
-  dmPolicy: 'open',
-  allowFrom: '*',
-}
-
-const initialConfTG: ConfTGForm = {
-  pid: '',
-  botToken: '',
-  defaultAccount: 'main',
-  dmPolicy: 'pairing',
-  allowFrom: '*',
-}
-
-const initialPairTG: PairTGForm = {
-  pid: '',
-  code: '',
-  channel: 'telegram',
-  dmPolicy: 'pairing',
-}
-
-const initialChat: ChatForm = {
-  pid: '',
-  command: '',
-}
-
-const initialVmdockerGet: VmdockerGetForm = {
-  dir: './vmdocker',
-  version: '',
-}
-
-const initialVmdockerInit: VmdockerInitForm = {
-  dir: './vmdocker',
-}
-
-type ImportedEnvState = {
-  fileName: string
-  sourcePath?: string
-  content: string
-  values: Record<string, string>
-}
+type CommandValuesMap = Record<string, Record<string, string | boolean>>
+type EnvAppliedFieldsMap = Record<string, Record<string, true>>
 
 export function App() {
-  const [rootCommand, setRootCommand] = useState<RootCommand>('openclaw')
-  const [openclawCommand, setOpenclawCommand] = useState<OpenclawCommandKey>('spawn')
-  const [vmdockerCommand, setVmdockerCommand] = useState<VmdockerCommandKey>('get')
-  const [shared, setShared] = useState<SharedForm>(initialShared)
-  const [spawn, setSpawn] = useState<SpawnForm>(initialSpawn)
-  const [confTG, setConfTG] = useState<ConfTGForm>(initialConfTG)
-  const [pairTG, setPairTG] = useState<PairTGForm>(initialPairTG)
-  const [chat, setChat] = useState<ChatForm>(initialChat)
-  const [vmdockerGet, setVmdockerGet] = useState<VmdockerGetForm>(initialVmdockerGet)
-  const [vmdockerInit, setVmdockerInit] = useState<VmdockerInitForm>(initialVmdockerInit)
+  const [catalog, setCatalog] = useState<CatalogRoot[]>([])
+  const [selectedRoot, setSelectedRoot] = useState('')
+  const [selectedCommand, setSelectedCommand] = useState('')
+  const [commandValues, setCommandValues] = useState<CommandValuesMap>({})
   const [importedEnv, setImportedEnv] = useState<ImportedEnvState | null>(null)
   const [envPath, setEnvPath] = useState('./vmdocker/.env')
   const [envStatus, setEnvStatus] = useState('')
@@ -125,48 +38,80 @@ export function App() {
   const [showEnvViewer, setShowEnvViewer] = useState(false)
   const [health, setHealth] = useState<HealthResponse | null>(null)
   const [loading, setLoading] = useState(false)
+  const [bootError, setBootError] = useState('')
   const [error, setError] = useState('')
   const [result, setResult] = useState<CommandResponse | null>(null)
   const [copyFeedback, setCopyFeedback] = useState('')
+  const commandValuesRef = useRef<CommandValuesMap>({})
+  const envAppliedFieldsRef = useRef<EnvAppliedFieldsMap>({})
+
+  function setCommandValuesAndRef(updater: (current: CommandValuesMap) => CommandValuesMap) {
+    setCommandValues((current) => {
+      const next = updater(current)
+      commandValuesRef.current = next
+      return next
+    })
+  }
 
   useEffect(() => {
-    fetchHealth()
-      .then((data) => {
-        setHealth(data)
-        if (data.vmdockerDir) {
-          setVmdockerGet((current) => ({
-            ...current,
-            dir: current.dir === './vmdocker' ? data.vmdockerDir : current.dir,
-          }))
-          setVmdockerInit((current) => ({
-            ...current,
-            dir: current.dir === './vmdocker' ? data.vmdockerDir : current.dir,
-          }))
+    Promise.all([fetchHealth(), fetchCatalog()])
+      .then(([healthData, catalogData]) => {
+        setHealth(healthData)
+        setCatalog(catalogData.roots)
+        setCommandValuesAndRef((current) => {
+          const withDefaults = mergeCommandValues(catalogData.roots, current)
+          return withHealthDefaults(catalogData.roots, withDefaults, healthData.vmdockerDir)
+        })
+
+        const firstRoot = catalogData.roots[0]
+        if (firstRoot) {
+          setSelectedRoot((current) => current || firstRoot.name)
+          setSelectedCommand((current) => current || firstRoot.commands[0]?.name || '')
         }
       })
-      .catch((err: Error) => setError(err.message))
+      .catch((err: Error) => setBootError(err.message))
   }, [])
 
-  const payload = useMemo<Record<string, string>>(() => {
-    if (rootCommand === 'openclaw') {
-      if (openclawCommand === 'spawn') return { ...shared, ...spawn }
-      if (openclawCommand === 'conf-tg') return { ...shared, ...confTG }
-      if (openclawCommand === 'pair-tg') return { ...shared, ...pairTG }
-      return { ...shared, ...chat }
-    }
-    if (vmdockerCommand === 'get') {
-      return { ...vmdockerGet }
-    }
-    return {
-      ...vmdockerInit,
-      envFileName: importedEnv?.fileName ?? '',
-      envFileContent: importedEnv?.content ?? '',
-    }
-  }, [rootCommand, openclawCommand, vmdockerCommand, shared, spawn, confTG, pairTG, chat, vmdockerGet, vmdockerInit, importedEnv])
+  useEffect(() => {
+    commandValuesRef.current = commandValues
+  }, [commandValues])
 
-  const activeCommand = rootCommand === 'openclaw' ? openclawCommand : vmdockerCommand
+  const activeRoot = useMemo(
+    () => catalog.find((root) => root.name === selectedRoot) ?? catalog[0] ?? null,
+    [catalog, selectedRoot],
+  )
+  const activeCommand = useMemo(
+    () => activeRoot?.commands?.find((command) => command.name === selectedCommand) ?? activeRoot?.commands?.[0] ?? null,
+    [activeRoot, selectedCommand],
+  )
+  const activeCommandKey = activeCommand ? pathKey(activeCommand.path) : ''
+  const activeValues = activeCommand ? commandValues[activeCommandKey] ?? buildDefaultValues(activeCommand) : {}
+
+  useEffect(() => {
+    if (!activeRoot) {
+      return
+    }
+    if (selectedRoot !== activeRoot.name) {
+      setSelectedRoot(activeRoot.name)
+      return
+    }
+    if (!activeRoot.commands?.some((command) => command.name === selectedCommand)) {
+      setSelectedCommand(activeRoot.commands?.[0]?.name || '')
+    }
+  }, [activeRoot, selectedCommand, selectedRoot])
+
+  useEffect(() => {
+    if (catalog.length === 0 || !importedEnv) {
+      return
+    }
+
+    const result = applyEnvMappings(catalog, commandValuesRef.current, importedEnv.values, envAppliedFieldsRef.current)
+    envAppliedFieldsRef.current = result.appliedFields
+    setCommandValuesAndRef(() => result.values)
+  }, [catalog, importedEnv])
+
   const hasImportedEnv = Boolean(importedEnv?.content.trim())
-  const hasImportedPrivateKey = Boolean(importedEnv?.values.VMDOCKER_PRIVATE_KEY)
+  const hasImportedPrivateKey = Boolean(firstEnvValue(importedEnv?.values ?? {}, ['VMDOCKER_PRIVATE_KEY', 'HYPE_PRIVATE_KEY', 'PRV_KEY']))
   const spawnedPids = result?.spawnedPids ?? []
   const importedEnvKeys = useMemo(() => {
     if (!importedEnv) {
@@ -180,7 +125,8 @@ export function App() {
     }
     return Object.entries(importedEnv.values).sort(([left], [right]) => left.localeCompare(right))
   }, [importedEnv])
-  const runDisabled = loading || (rootCommand === 'vmdocker' && vmdockerCommand === 'init' && !hasImportedEnv)
+  const fieldGroups = useMemo(() => groupFields(activeCommand), [activeCommand])
+  const runDisabled = loading || !activeCommand || !activeCommand.supported || (activeCommand?.importedEnvRequired && !hasImportedEnv)
 
   async function copyPID(pid: string) {
     try {
@@ -193,25 +139,13 @@ export function App() {
     }
   }
 
-  function applyImportedEnv(values: Record<string, string>) {
-    const importedPrivateKey = firstEnvValue(values, ['HYPE_PRIVATE_KEY', 'PRV_KEY', 'VMDOCKER_PRIVATE_KEY'])
-    if (importedPrivateKey) {
-      setShared((current) => ({ ...current, privateKey: importedPrivateKey }))
-    }
-
-    setSpawn((current) => ({
-      ...current,
-      moduleId: values.OPENCLAW_MODULE_ID ?? current.moduleId,
-      scheduler: values.VMDOCKER_SCHEDULER ?? current.scheduler,
-      model: values.OPENCLAW_MODEL ?? current.model,
-      provider: values.OPENCLAW_PROVIDER ?? current.provider,
-      apiKey: values.OPENCLAW_API_KEY ?? current.apiKey,
-      gatewayToken: values.OPENCLAW_GATEWAY_TOKEN ?? current.gatewayToken,
-      botToken: values.OPENCLAW_TELEGRAM_BOT_TOKEN ?? current.botToken,
-      defaultAccount: values.OPENCLAW_TELEGRAM_DEFAULT_ACCOUNT ?? current.defaultAccount,
-      dmPolicy: values.OPENCLAW_TELEGRAM_DM_POLICY ?? current.dmPolicy,
-      allowFrom: values.OPENCLAW_TELEGRAM_ALLOW_FROM ?? current.allowFrom,
-    }))
+  function applyImportedEnv(values: Record<string, string>, fileName: string, sourcePath?: string, content = '') {
+    setImportedEnv({
+      fileName,
+      sourcePath,
+      content,
+      values,
+    })
   }
 
   async function onEnvImport(e: ChangeEvent<HTMLInputElement>) {
@@ -225,13 +159,8 @@ export function App() {
     try {
       const content = await file.text()
       const values = parseEnvContent(content)
-      setImportedEnv({ fileName: file.name, content, values })
-      setEnvStatus(
-        `Loaded ${Object.keys(values).length} keys from ${file.name}. ${
-          values.VMDOCKER_PRIVATE_KEY ? 'VMDOCKER_PRIVATE_KEY detected.' : 'VMDOCKER_PRIVATE_KEY missing.'
-        }`,
-      )
-      applyImportedEnv(values)
+      applyImportedEnv(values, file.name, undefined, content)
+      setEnvStatus(buildEnvStatus(values, file.name))
     } catch (err) {
       setImportedEnv(null)
       setEnvStatus('')
@@ -246,18 +175,8 @@ export function App() {
     try {
       const loaded = await loadEnvFile(envPath)
       const values = parseEnvContent(loaded.content)
-      setImportedEnv({
-        fileName: loaded.fileName,
-        sourcePath: loaded.path,
-        content: loaded.content,
-        values,
-      })
-      setEnvStatus(
-        `Loaded ${Object.keys(values).length} keys from ${loaded.path}. ${
-          values.VMDOCKER_PRIVATE_KEY ? 'VMDOCKER_PRIVATE_KEY detected.' : 'VMDOCKER_PRIVATE_KEY missing.'
-        }`,
-      )
-      applyImportedEnv(values)
+      applyImportedEnv(values, loaded.fileName, loaded.path, loaded.content)
+      setEnvStatus(buildEnvStatus(values, loaded.path))
     } catch (err) {
       setImportedEnv(null)
       setEnvError(err instanceof Error ? err.message : 'Failed to load env file path')
@@ -265,47 +184,64 @@ export function App() {
   }
 
   function clearImportedEnv() {
+    const clearedValues = clearEnvMappedValues(catalog, commandValuesRef.current, envAppliedFieldsRef.current)
+    envAppliedFieldsRef.current = {}
+    setCommandValuesAndRef(() => clearedValues)
     setImportedEnv(null)
     setEnvStatus('')
     setEnvError('')
     setShowEnvViewer(false)
   }
 
+  function updateFieldValue(command: CatalogCommand, field: CatalogField, value: string | boolean) {
+    const key = pathKey(command.path)
+    envAppliedFieldsRef.current = removeEnvAppliedField(envAppliedFieldsRef.current, key, field.name)
+    setCommandValuesAndRef((current) => ({
+      ...current,
+      [key]: {
+        ...(current[key] ?? buildDefaultValues(command)),
+        [field.name]: value,
+      },
+    }))
+  }
+
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError('')
 
-    if (rootCommand === 'openclaw') {
-      const sharedCheck = sharedSchema.safeParse(shared)
-      if (!sharedCheck.success) {
-        setError(sharedCheck.error.issues[0]?.message || 'shared fields invalid')
-        return
-      }
+    if (!activeCommand) {
+      setError('No command selected')
+      return
+    }
+    if (!activeCommand.supported) {
+      setError(activeCommand.disabledReason || 'This command cannot run from the embedded UI.')
+      return
+    }
+    if (activeCommand.importedEnvRequired && !importedEnv?.content.trim()) {
+      setError('Import a .env file before running this command.')
+      return
+    }
 
-      let valid = true
-      if (openclawCommand === 'spawn') valid = spawnSchema.safeParse(spawn).success
-      if (openclawCommand === 'conf-tg') valid = confTGSchema.safeParse(confTG).success
-      if (openclawCommand === 'pair-tg') valid = pairTGSchema.safeParse(pairTG).success
-      if (openclawCommand === 'chat') valid = chatSchema.safeParse(chat).success
-      if (!valid) {
-        setError('current command form has invalid or missing fields')
-        return
-      }
-    } else {
-      const valid = vmdockerCommand === 'get' ? vmdockerGetSchema.safeParse(vmdockerGet).success : vmdockerInitSchema.safeParse(vmdockerInit).success
-      if (!valid) {
-        setError('current command form has invalid or missing fields')
-        return
-      }
-      if (vmdockerCommand === 'init' && !hasImportedEnv) {
-        setError('Import a .env file before running vmdocker init.')
-        return
+    const missing = activeCommand.fields.find((field) => field.required && isMissingValue(activeValues[field.name], field.kind))
+    if (missing) {
+      setError(`${missing.label} is required`)
+      return
+    }
+
+    const payload: RunRequest = {
+      path: activeCommand.path,
+      values: serializeValues(activeCommand, activeValues),
+    }
+    if (activeCommand.importedEnvRequired && importedEnv) {
+      payload.importedEnv = {
+        fileName: importedEnv.fileName,
+        content: importedEnv.content,
       }
     }
 
     setLoading(true)
     try {
-      const data = await runCommand(rootCommand, activeCommand, payload)
+      const data = await runCommand(payload)
       setResult(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'request failed')
@@ -334,8 +270,8 @@ export function App() {
       <section className="env-import">
         <div>
           <p className="section-kicker">.env Import</p>
-          <h2>Load local runtime values before you run UI commands</h2>
-          <p className="env-import-copy">Imported values stay in memory only and can prefill both Openclaw and VMDocker forms. Hidden files can be loaded by path.</p>
+          <h2>Load shared runtime values before you run UI commands</h2>
+          <p className="env-import-copy">Imported values stay in memory only and prefill matching fields across commands. They are not injected into command processes.</p>
         </div>
         <div className="env-import-actions">
           <div className="env-import-inline">
@@ -372,157 +308,93 @@ export function App() {
         <aside className="sidebar" aria-label="Command navigation">
           <label>
             Root Command
-            <select value={rootCommand} onChange={(e) => setRootCommand(e.target.value as RootCommand)}>
-              {rootCommands.map((cmd) => (
-                <option key={cmd} value={cmd}>
-                  {cmd}
+            <select value={activeRoot?.name ?? ''} onChange={(e) => setSelectedRoot(e.target.value)}>
+              {catalog.map((root) => (
+                <option key={root.name} value={root.name}>
+                  {root.name}
                 </option>
               ))}
             </select>
           </label>
 
-          {rootCommand === 'openclaw' ? (
-            openclawCommands.map((cmd) => {
-              return (
-                <button
-                  key={cmd}
-                  type="button"
-                  className={cmd === openclawCommand ? 'nav-btn active' : 'nav-btn'}
-                  onClick={() => setOpenclawCommand(cmd)}
-                >
-                  {openclawCommandLabels[cmd]}
-                </button>
-              )
-            })
-          ) : (
-            vmdockerCommands.map((cmd) => (
-              <button
-                key={cmd}
-                type="button"
-                className={cmd === vmdockerCommand ? 'nav-btn active' : 'nav-btn'}
-                onClick={() => setVmdockerCommand(cmd)}
-              >
-                {vmdockerCommandLabels[cmd]}
-              </button>
-            ))
-          )}
+          {(activeRoot?.commands ?? []).map((command) => (
+            <button
+              key={command.name}
+              type="button"
+              className={command.name === activeCommand?.name ? 'nav-btn active' : 'nav-btn'}
+              onClick={() => setSelectedCommand(command.name)}
+            >
+              {command.name}
+            </button>
+          ))}
         </aside>
 
         <section className="panel">
-          <form onSubmit={onSubmit}>
-            {rootCommand === 'openclaw' && (
-              <fieldset>
-                <legend>Shared</legend>
-                <label>
-                  Node URL
-                  <input
-                    value={shared.nodeUrl}
-                    onChange={(e) => setShared({ ...shared, nodeUrl: e.target.value })}
-                    placeholder="http://127.0.0.1:8080"
-                  />
-                </label>
-                <label>
-                  Private Key (optional if HYPE_PRIVATE_KEY/PRV_KEY/VMDOCKER_PRIVATE_KEY provided)
-                  <input
-                    value={shared.privateKey}
-                    onChange={(e) => setShared({ ...shared, privateKey: e.target.value })}
-                    placeholder="0x..."
-                  />
-                </label>
-              </fieldset>
-            )}
+          <div className="form-column">
+            <div className="command-head">
+              <p className="section-kicker">Command</p>
+              <h2>{activeCommand ? activeCommand.path.join(' / ') : 'Loading commands...'}</h2>
+              <p>{activeCommand?.description || activeRoot?.description || 'Select a command to configure and run.'}</p>
+            </div>
 
-            {rootCommand === 'openclaw' && openclawCommand === 'spawn' && (
-              <fieldset>
-                <legend>spawn</legend>
-                <label>Module ID<input value={spawn.moduleId} onChange={(e) => setSpawn({ ...spawn, moduleId: e.target.value })} /></label>
-                <label>Scheduler<input value={spawn.scheduler} onChange={(e) => setSpawn({ ...spawn, scheduler: e.target.value })} /></label>
-                <label>Model<input value={spawn.model} onChange={(e) => setSpawn({ ...spawn, model: e.target.value })} /></label>
-                <label>Provider<input value={spawn.provider} onChange={(e) => setSpawn({ ...spawn, provider: e.target.value })} placeholder="zen" /></label>
-                <label>API Key<input value={spawn.apiKey} onChange={(e) => setSpawn({ ...spawn, apiKey: e.target.value })} /></label>
-                <label>Gateway Token<input value={spawn.gatewayToken} onChange={(e) => setSpawn({ ...spawn, gatewayToken: e.target.value })} /></label>
-                <label>
-                  Runtime Backend
-                  <select value={spawn.runtimeBackend} onChange={(e) => setSpawn({ ...spawn, runtimeBackend: e.target.value })}>
-                    <option value="">auto (let vmdocker choose)</option>
-                    <option value="docker">docker</option>
-                    <option value="sandbox">sandbox</option>
-                  </select>
-                </label>
-                <label>Bot Token (optional auto conf-tg)<input value={spawn.botToken} onChange={(e) => setSpawn({ ...spawn, botToken: e.target.value })} /></label>
-                <label>Default Account<input value={spawn.defaultAccount} onChange={(e) => setSpawn({ ...spawn, defaultAccount: e.target.value })} /></label>
-                <label>DM Policy<input value={spawn.dmPolicy} onChange={(e) => setSpawn({ ...spawn, dmPolicy: e.target.value })} /></label>
-                <label>Allow From<input value={spawn.allowFrom} onChange={(e) => setSpawn({ ...spawn, allowFrom: e.target.value })} /></label>
-              </fieldset>
-            )}
+            {bootError && <p className="error">{bootError}</p>}
 
-            {rootCommand === 'openclaw' && openclawCommand === 'conf-tg' && (
-              <fieldset>
-                <legend>conf-tg</legend>
-                <label>PID<input value={confTG.pid} onChange={(e) => setConfTG({ ...confTG, pid: e.target.value })} /></label>
-                <label>Bot Token<input value={confTG.botToken} onChange={(e) => setConfTG({ ...confTG, botToken: e.target.value })} /></label>
-                <label>Default Account<input value={confTG.defaultAccount} onChange={(e) => setConfTG({ ...confTG, defaultAccount: e.target.value })} /></label>
-                <label>DM Policy<input value={confTG.dmPolicy} onChange={(e) => setConfTG({ ...confTG, dmPolicy: e.target.value })} /></label>
-                <label>Allow From<input value={confTG.allowFrom} onChange={(e) => setConfTG({ ...confTG, allowFrom: e.target.value })} placeholder="*" /></label>
-              </fieldset>
-            )}
+            {activeCommand && !activeCommand.supported ? (
+              <section className="unsupported-card">
+                <h3>Unavailable in Web UI</h3>
+                <p>{activeCommand.disabledReason}</p>
+              </section>
+            ) : (
+              <form onSubmit={onSubmit}>
+                {fieldGroups.map(([group, fields]) => (
+                  <fieldset key={group}>
+                    <legend>{group === 'shared' ? 'Shared' : activeCommand?.title || 'Command'}</legend>
+                    {(fields ?? []).map((field) => renderField(field, activeValues[field.name], activeCommand, updateFieldValue))}
+                  </fieldset>
+                ))}
 
-            {rootCommand === 'openclaw' && openclawCommand === 'pair-tg' && (
-              <fieldset>
-                <legend>pair-tg</legend>
-                <label>PID<input value={pairTG.pid} onChange={(e) => setPairTG({ ...pairTG, pid: e.target.value })} /></label>
-                <label>Code<input value={pairTG.code} onChange={(e) => setPairTG({ ...pairTG, code: e.target.value })} /></label>
-                <label>Channel<input value={pairTG.channel} onChange={(e) => setPairTG({ ...pairTG, channel: e.target.value })} /></label>
-                <label>DM Policy<input value={pairTG.dmPolicy} onChange={(e) => setPairTG({ ...pairTG, dmPolicy: e.target.value })} /></label>
-              </fieldset>
-            )}
+                {activeCommand?.importedEnvRequired && (
+                  <p className="field-hint">
+                    This command uses the imported <code>.env</code> content. Import is required before execution.
+                  </p>
+                )}
 
-            {rootCommand === 'openclaw' && openclawCommand === 'chat' && (
-              <fieldset>
-                <legend>chat</legend>
-                <label>PID<input value={chat.pid} onChange={(e) => setChat({ ...chat, pid: e.target.value })} /></label>
-                <label>Command<textarea value={chat.command} onChange={(e) => setChat({ ...chat, command: e.target.value })} rows={4} /></label>
-              </fieldset>
+                <button disabled={runDisabled} className="run-btn" type="submit">
+                  {loading ? 'Running...' : activeCommand ? `Run ${activeCommand.path.join(' ')}` : 'Run'}
+                </button>
+              </form>
             )}
-
-            {rootCommand === 'vmdocker' && vmdockerCommand === 'get' && (
-              <fieldset>
-                <legend>vmdocker get</legend>
-                <label>
-                  Checkout Directory
-                  <input value={vmdockerGet.dir} onChange={(e) => setVmdockerGet({ ...vmdockerGet, dir: e.target.value })} />
-                </label>
-                <label>
-                  Version (optional)
-                  <input
-                    value={vmdockerGet.version}
-                    onChange={(e) => setVmdockerGet({ ...vmdockerGet, version: e.target.value })}
-                    placeholder="latest semver if empty"
-                  />
-                </label>
-              </fieldset>
-            )}
-
-            {rootCommand === 'vmdocker' && vmdockerCommand === 'init' && (
-              <fieldset>
-                <legend>vmdocker init</legend>
-                <label>
-                  Checkout Directory
-                  <input value={vmdockerInit.dir} onChange={(e) => setVmdockerInit({ ...vmdockerInit, dir: e.target.value })} />
-                </label>
-                <p className="field-hint">
-                  This command uses the imported <code>.env</code> content. Import is required before execution.
-                </p>
-              </fieldset>
-            )}
-
-            <button disabled={runDisabled} className="run-btn" type="submit">
-              {loading ? 'Running...' : `Run ${rootCommand} ${activeCommand}`}
-            </button>
-          </form>
+          </div>
 
           <div className="result-column">
-            {rootCommand === 'openclaw' && openclawCommand === 'spawn' && (
+            <section className="env-summary" aria-live="polite">
+              <div className="result-head">
+                <h2>Imported .env</h2>
+                {importedEnv && <span className={hasImportedPrivateKey ? 'env-pill ok' : 'env-pill warn'}>{hasImportedPrivateKey ? 'Shared values ready' : 'Missing private key'}</span>}
+              </div>
+              {!importedEnv ? (
+                <p>No imported .env yet.</p>
+              ) : (
+                <>
+                  <p className="env-summary-meta">
+                    {importedEnv.sourcePath ?? importedEnv.fileName} | {Object.keys(importedEnv.values).length} keys loaded
+                  </p>
+                  {importedEnvKeys.length > 0 ? (
+                    <ul className="env-key-list">
+                      {importedEnvKeys.map((key) => (
+                        <li key={key}>
+                          <code>{key}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>No mapped keys detected yet.</p>
+                  )}
+                </>
+              )}
+            </section>
+
+            {activeCommandKey === 'openclaw/spawn' && (
               <section className="spawn-pids" aria-live="polite">
                 <div className="result-head">
                   <h2>Spawned PIDs</h2>
@@ -540,35 +412,6 @@ export function App() {
                       </li>
                     ))}
                   </ul>
-                )}
-              </section>
-            )}
-
-            {rootCommand === 'vmdocker' && (
-              <section className="env-summary" aria-live="polite">
-                <div className="result-head">
-                  <h2>Imported .env</h2>
-                  {importedEnv && <span className={hasImportedPrivateKey ? 'env-pill ok' : 'env-pill warn'}>{hasImportedPrivateKey ? 'Ready for init' : 'Missing private key'}</span>}
-                </div>
-                {!importedEnv ? (
-                  <p>No imported .env yet.</p>
-                ) : (
-                  <>
-                    <p className="env-summary-meta">
-                      {importedEnv.sourcePath ?? importedEnv.fileName} | {Object.keys(importedEnv.values).length} keys loaded
-                    </p>
-                    {importedEnvKeys.length > 0 ? (
-                      <ul className="env-key-list">
-                        {importedEnvKeys.map((key) => (
-                          <li key={key}>
-                            <code>{key}</code>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>No Openclaw/VMDocker keys detected yet.</p>
-                    )}
-                  </>
                 )}
               </section>
             )}
@@ -644,4 +487,260 @@ export function App() {
       )}
     </div>
   )
+}
+
+function pathKey(path: string[]): string {
+  return path.join('/')
+}
+
+function buildDefaultValues(command: CatalogCommand): Record<string, string | boolean> {
+  return (command.fields ?? []).reduce<Record<string, string | boolean>>((acc, field) => {
+    acc[field.name] = field.kind === 'bool' ? field.defaultValue === 'true' : field.defaultValue ?? ''
+    return acc
+  }, {})
+}
+
+function mergeCommandValues(catalog: CatalogRoot[], current: CommandValuesMap): CommandValuesMap {
+  const next: CommandValuesMap = {}
+
+  for (const root of catalog) {
+    for (const command of root.commands ?? []) {
+      const key = pathKey(command.path)
+      const defaults = buildDefaultValues(command)
+      next[key] = {
+        ...defaults,
+        ...(current[key] ?? {}),
+      }
+    }
+  }
+
+  return next
+}
+
+function withHealthDefaults(catalog: CatalogRoot[], current: CommandValuesMap, vmdockerDir?: string): CommandValuesMap {
+  if (!vmdockerDir) {
+    return current
+  }
+
+  const next = { ...current }
+  for (const root of catalog) {
+    for (const command of root.commands ?? []) {
+      if (!command.path[0].startsWith('vmdocker')) {
+        continue
+      }
+      const key = pathKey(command.path)
+      const values = { ...(next[key] ?? {}) }
+      if (values.dir === '' || values.dir === './vmdocker') {
+        values.dir = vmdockerDir
+      }
+      next[key] = values
+    }
+  }
+  return next
+}
+
+function applyEnvMappings(
+  catalog: CatalogRoot[],
+  current: CommandValuesMap,
+  envValues: Record<string, string>,
+  previousAppliedFields: EnvAppliedFieldsMap,
+): { values: CommandValuesMap; appliedFields: EnvAppliedFieldsMap } {
+  const next = mergeCommandValues(catalog, clearEnvMappedValues(catalog, current, previousAppliedFields))
+  const appliedFields: EnvAppliedFieldsMap = {}
+
+  for (const root of catalog) {
+    for (const command of root.commands ?? []) {
+      const key = pathKey(command.path)
+      const values = { ...(next[key] ?? {}) }
+      for (const field of command.fields ?? []) {
+        const envValue = findFirstEnvValue(envValues, field.envKeys)
+        if (!envValue) {
+          continue
+        }
+        values[field.name] = field.kind === 'bool' ? envValue === 'true' : envValue
+        appliedFields[key] = {
+          ...(appliedFields[key] ?? {}),
+          [field.name]: true,
+        }
+      }
+      next[key] = values
+    }
+  }
+
+  return { values: next, appliedFields }
+}
+
+function clearEnvMappedValues(catalog: CatalogRoot[], current: CommandValuesMap, appliedFields: EnvAppliedFieldsMap): CommandValuesMap {
+  const commandIndex = indexCatalogCommands(catalog)
+  const next: CommandValuesMap = { ...current }
+
+  for (const [key, fields] of Object.entries(appliedFields)) {
+    const command = commandIndex[key]
+    if (!command) {
+      continue
+    }
+
+    const defaults = buildDefaultValues(command)
+    const values = {
+      ...defaults,
+      ...(next[key] ?? {}),
+    }
+    for (const fieldName of Object.keys(fields)) {
+      values[fieldName] = defaults[fieldName] ?? ''
+    }
+    next[key] = values
+  }
+
+  return next
+}
+
+function indexCatalogCommands(catalog: CatalogRoot[]): Record<string, CatalogCommand> {
+  return catalog.reduce<Record<string, CatalogCommand>>((acc, root) => {
+    for (const command of root.commands ?? []) {
+      acc[pathKey(command.path)] = command
+    }
+    return acc
+  }, {})
+}
+
+function removeEnvAppliedField(appliedFields: EnvAppliedFieldsMap, key: string, fieldName: string): EnvAppliedFieldsMap {
+  if (!appliedFields[key]?.[fieldName]) {
+    return appliedFields
+  }
+
+  const next = { ...appliedFields }
+  const nextFields = { ...(next[key] ?? {}) }
+  delete nextFields[fieldName]
+
+  if (Object.keys(nextFields).length === 0) {
+    delete next[key]
+    return next
+  }
+
+  next[key] = nextFields
+  return next
+}
+
+function findFirstEnvValue(values: Record<string, string>, keys?: string[]): string {
+  if (!keys?.length) {
+    return ''
+  }
+  return firstEnvValue(values, keys)
+}
+
+function buildEnvStatus(values: Record<string, string>, source: string): string {
+  return `Loaded ${Object.keys(values).length} keys from ${source}. ${
+    firstEnvValue(values, ['VMDOCKER_PRIVATE_KEY', 'HYPE_PRIVATE_KEY', 'PRV_KEY']) ? 'Private key detected.' : 'Private key missing.'
+  }`
+}
+
+function groupFields(command: CatalogCommand | null): Array<[string, CatalogField[]]> {
+  if (!command) {
+    return []
+  }
+
+  const grouped = new Map<string, CatalogField[]>()
+  for (const field of command.fields ?? []) {
+    const group = field.group || 'command'
+    grouped.set(group, [...(grouped.get(group) ?? []), field])
+  }
+
+  return Array.from(grouped.entries()).sort(([left], [right]) => {
+    if (left === right) {
+      return 0
+    }
+    if (left === 'shared') {
+      return -1
+    }
+    if (right === 'shared') {
+      return 1
+    }
+    return left.localeCompare(right)
+  })
+}
+
+function renderField(
+  field: CatalogField,
+  value: string | boolean | undefined,
+  command: CatalogCommand | null,
+  updateFieldValue: (command: CatalogCommand, field: CatalogField, value: string | boolean) => void,
+) {
+  if (!command) {
+    return null
+  }
+
+  const hint = field.description ? `${field.description}${field.required ? ' Required.' : ''}` : field.required ? 'Required.' : ''
+
+  if (field.kind === 'bool') {
+    return (
+      <label key={field.name} className="checkbox-field">
+        <span>{field.label}</span>
+        <input
+          type="checkbox"
+          checked={Boolean(value)}
+          onChange={(e) => updateFieldValue(command, field, e.target.checked)}
+        />
+        {hint && <span className="field-hint">{hint}</span>}
+      </label>
+    )
+  }
+
+  if (field.kind === 'enum') {
+    return (
+      <label key={field.name}>
+        {field.label}
+        <select value={typeof value === 'string' ? value : ''} onChange={(e) => updateFieldValue(command, field, e.target.value)}>
+          {(field.options ?? []).map((option) => (
+            <option key={`${field.name}-${option.value || 'empty'}`} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {hint && <span className="field-hint">{hint}</span>}
+      </label>
+    )
+  }
+
+  if (field.kind === 'multiline') {
+    return (
+      <label key={field.name}>
+        {field.label}
+        <textarea value={typeof value === 'string' ? value : ''} onChange={(e) => updateFieldValue(command, field, e.target.value)} rows={5} />
+        {hint && <span className="field-hint">{hint}</span>}
+      </label>
+    )
+  }
+
+  return (
+    <label key={field.name}>
+      {field.label}
+      <input
+        type={field.kind === 'secret' ? 'password' : field.kind === 'int' || field.kind === 'int64' ? 'number' : 'text'}
+        value={typeof value === 'string' ? value : ''}
+        onChange={(e) => updateFieldValue(command, field, e.target.value)}
+        placeholder={field.defaultValue || ''}
+      />
+      {hint && <span className="field-hint">{hint}</span>}
+    </label>
+  )
+}
+
+function isMissingValue(value: string | boolean | undefined, kind: CatalogField['kind']): boolean {
+  if (kind === 'bool') {
+    return false
+  }
+  return typeof value !== 'string' || value.trim() === ''
+}
+
+function serializeValues(command: CatalogCommand, values: Record<string, string | boolean>): Record<string, string | boolean> {
+  const serialized: Record<string, string | boolean> = {}
+  for (const field of command.fields ?? []) {
+    const value = values[field.name]
+    if (typeof value === 'boolean') {
+      serialized[field.name] = value
+      continue
+    }
+    serialized[field.name] = value ?? ''
+  }
+  return serialized
 }
