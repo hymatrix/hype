@@ -19,7 +19,7 @@
   - `go install ./cmd/hype`
   - or use `make install`
 - From GitHub with version:
-  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.6`
+  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.7`
   or
   - `go install github.com/hymatrix/hype/cmd/hype@latest`
 - From npm:
