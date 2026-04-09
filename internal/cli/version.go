@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	Version = "v0.0.6"
+	Version = "v0.0.7"
 )
 
 func versionBanner() string {

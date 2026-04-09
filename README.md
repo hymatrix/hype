@@ -1,6 +1,10 @@
 # hype
 **hype** is the official project scaffolding and management CLI tool for the entire **hymx** Node.
 
+Claude command usage guide:
+
+- [`tools/claude/README.md`](/Users/webbergao/work/src/HymxWorkspace/hype/tools/claude/README.md)
+
 ## Build
 - Use `make`:
   - `make build`
@@ -235,6 +239,8 @@ Example spawn with explicit sandbox backend:
 
 ### Command: claude
 - Description: Execute Claude runtime workflows through hymx SDK.
+- Detailed usage:
+  - [`tools/claude/README.md`](/Users/webbergao/work/src/HymxWorkspace/hype/tools/claude/README.md)
 - Subcommands:
   - `spawn`: Create a new Claude process using module + scheduler + Claude env tags.
   - `chat`: Send a chat message (`Chat`).
@@ -275,6 +281,8 @@ Example Claude exec:
 
 ## Hype Web UI
 - Description: Local Web UI embedded in the `hype` binary for `hype openclaw`, `hype claude`, and `hype vmdocker` commands.
+- Claude usage guide:
+  - [`tools/claude/README.md`](/Users/webbergao/work/src/HymxWorkspace/hype/tools/claude/README.md)
 - Features:
   - Local-only API server (`127.0.0.1:7788`).
   - Start with `hype ui`.
