@@ -1,16 +1,17 @@
 # Hype WebUI
 
-Local Web UI for `hype openclaw` commands (`spawn`, `conf-tg`, `pair-tg`, `chat`) and `hype vmdocker` commands (`get`, `init`).
+Local Web UI for `hype openclaw`, `hype claude`, and `hype vmdocker` commands.
 
 ## Features
 
 - Embedded in the `hype` binary via `hype ui`
 - Local-only API server (`127.0.0.1:7788`)
-- Executes the current `hype` binary for `openclaw` and `vmdocker` subcommands
+- Executes the current `hype` binary for `openclaw`, `claude`, and `vmdocker` subcommands
 - Top-level `.env` import stays in memory only and supports both file picker import and explicit path loading
 - `View Env` shows all imported env variables in a modal
-- Import prefills matching fields including `openclaw spawn.scheduler` from `VMDOCKER_SCHEDULER`
+- Import prefills matching fields including `openclaw spawn.scheduler` / `claude spawn.scheduler` from `VMDOCKER_SCHEDULER`
 - Spawn form supports `provider` and `runtimeBackend`
+- Claude forms support `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, and `CLAUDE_CODE_FLAGS`
 - `defaultModel` / `defaultProvider` are derived automatically from the effective `model` / `provider`
 - Spawn form can also auto-run `conf-tg` after spawn when `botToken` is filled
 - Displays structured JSON + raw stdout/stderr

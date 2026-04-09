@@ -50,6 +50,10 @@
   - `hype openclaw conf-tg -p <pid> --bot-token <token> [--default-account <account>] [--dm-policy <policy>] [--allow-from <value>] -k <privateKey> [-u <nodeURL>]`
   - `hype openclaw pair-tg -p <pid> -c <pairCode> [--channel telegram] [--dm-policy pairing] -k <privateKey> [-u <nodeURL>]`
   - `hype openclaw chat -p <pid> -c <command> -k <privateKey> [-u <nodeURL>]`
+  - `hype claude spawn -m <moduleId> -s <scheduler> --api-key <key> [--base-url <url>] [--model <model>] [--code-flags <flags>] [--runtime-backend <docker|sandbox>] -k <privateKey> [-u <nodeURL>]`
+  - `hype claude chat -p <pid> -c <command> -k <privateKey> [-u <nodeURL>]`
+  - `hype claude exec --pid <pid> -p <prompt> -k <privateKey> [-u <nodeURL>]`
+  - `hype claude -p <prompt> --pid <pid> -k <privateKey> [-u <nodeURL>]`
 - Version:
   - `hype -v` or `hype --version`
 - REPL (interactive mode):
@@ -229,12 +233,52 @@ Example spawn with explicit sandbox backend:
   --private-key <privateKey>
 ```
 
+### Command: claude
+- Description: Execute Claude runtime workflows through hymx SDK.
+- Subcommands:
+  - `spawn`: Create a new Claude process using module + scheduler + Claude env tags.
+  - `chat`: Send a chat message (`Chat`).
+  - `exec`: Send a generic prompt (`Execute`).
+- Shared Flags:
+  - `--node-url`, `-u`: Node URL. Default: `http://127.0.0.1:8080`.
+  - `--private-key`, `-k`: Private key; fallback order is `--private-key` > `HYPE_PRIVATE_KEY` > `PRV_KEY`.
+  - `--json`: Print JSON output.
+- Notes:
+  - `spawn` requires `--module-id`, `--scheduler`, `--api-key`.
+  - `spawn` env/tag layout is aligned with the Claude runtime in `vmdocker_agent`: `Container-Env-RUNTIME_TYPE=claude`, `Container-Env-ANTHROPIC_API_KEY`, optional `Container-Env-ANTHROPIC_BASE_URL`, optional `Container-Env-ANTHROPIC_MODEL`, optional `Container-Env-CLAUDE_CODE_FLAGS`, and optional `Runtime-Backend`.
+  - `spawn` reads these env vars when flags are omitted: `VMDOCKER_MODULE_ID`, `VMDOCKER_SCHEDULER`, `RUNTIME_BACKEND`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, `CLAUDE_CODE_FLAGS`.
+  - `chat` sends `Action=Chat`.
+  - `exec` sends `Action=Execute`.
+  - `hype claude -p "..." --pid <pid>` is a shortcut for `hype claude exec --pid <pid> -p "..."`.
+
+Example Claude spawn:
+
+```bash
+./build/hype claude spawn \
+  --module-id <moduleId> \
+  --scheduler <scheduler> \
+  --api-key <anthropicApiKey> \
+  --base-url <anthropicBaseURL> \
+  --model <anthropicModel> \
+  --runtime-backend sandbox \
+  --private-key <privateKey>
+```
+
+Example Claude exec:
+
+```bash
+./build/hype claude exec \
+  --pid <pid> \
+  --prompt "你好，请介绍一下自己" \
+  --private-key <privateKey>
+```
+
 ## Hype Web UI
-- Description: Local Web UI embedded in the `hype` binary for `hype openclaw` commands (`spawn`, `conf-tg`, `pair-tg`, `chat`) and `hype vmdocker` commands (`get`, `init`).
+- Description: Local Web UI embedded in the `hype` binary for `hype openclaw`, `hype claude`, and `hype vmdocker` commands.
 - Features:
   - Local-only API server (`127.0.0.1:7788`).
   - Start with `hype ui`.
-  - Executes the current `hype` binary for `openclaw` and `vmdocker` subcommands.
+  - Executes the current `hype` binary for `openclaw`, `claude`, and `vmdocker` subcommands.
   - Displays structured JSON and raw stdout/stderr.
   - Masks sensitive fields in command preview.
   - Keeps secrets in memory only (no localStorage persistence).

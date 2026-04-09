@@ -78,6 +78,50 @@ func TestBuildOpenclawArgsValidation(t *testing.T) {
 	}
 }
 
+func TestBuildClaudeArgsSpawn(t *testing.T) {
+	req := openclawRequest{
+		NodeURL:        "http://127.0.0.1:8081",
+		PrivateKey:     "0xabc",
+		ModuleID:       "mod-1",
+		Scheduler:      "scheduler-1",
+		APIKey:         "anthropic-key",
+		BaseURL:        "https://proxy.example",
+		Model:          "claude-sonnet-4-5",
+		CodeFlags:      "--append-system-prompt test",
+		RuntimeBackend: "sandbox",
+	}
+	args, err := buildClaudeArgs("spawn", req)
+	if err != nil {
+		t.Fatalf("build args failed: %v", err)
+	}
+
+	has := func(flag, value string) bool {
+		for i := 0; i < len(args)-1; i++ {
+			if args[i] == flag && args[i+1] == value {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !has("--module-id", "mod-1") || !has("--scheduler", "scheduler-1") || !has("--api-key", "anthropic-key") {
+		t.Fatalf("missing required args: %v", args)
+	}
+	if !has("--base-url", "https://proxy.example") || !has("--model", "claude-sonnet-4-5") {
+		t.Fatalf("missing anthropic args: %v", args)
+	}
+	if !has("--code-flags", "--append-system-prompt test") || !has("--runtime-backend", "sandbox") {
+		t.Fatalf("missing runtime args: %v", args)
+	}
+}
+
+func TestBuildClaudeArgsExecValidation(t *testing.T) {
+	_, err := buildClaudeArgs("exec", openclawRequest{PID: "pid-1"})
+	if err == nil {
+		t.Fatal("expected validation error when prompt is empty")
+	}
+}
+
 func TestMaskSensitive(t *testing.T) {
 	masked := maskSensitive("hype", []string{"openclaw", "spawn", "--private-key", "0xabc", "--api-key", "key", "--model", "x"})
 	joined := strings.Join(masked, " ")
@@ -204,6 +248,35 @@ func TestChatRouteExecutesCurrentBinary(t *testing.T) {
 	body := resp.Body.String()
 	if !strings.Contains(body, `"ok":true`) || !strings.Contains(body, `"response_id":"msg-1"`) {
 		t.Fatalf("expected parsed chat response, got %s", body)
+	}
+}
+
+func TestClaudeExecRouteExecutesCurrentBinary(t *testing.T) {
+	workingDir := t.TempDir()
+	binaryPath := writeFakeHypeBinary(t, workingDir)
+
+	handler, err := NewHandler(Config{
+		BinaryPath: binaryPath,
+		WorkingDir: workingDir,
+		Listen:     defaultListen,
+		Timeout:    5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("new handler failed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/claude/exec", strings.NewReader(`{"pid":"pid-1","prompt":"hello"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected claude exec 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+
+	body := resp.Body.String()
+	if !strings.Contains(body, `"ok":true`) || !strings.Contains(body, `"response_id":"msg-claude-1"`) {
+		t.Fatalf("expected parsed claude exec response, got %s", body)
 	}
 }
 
@@ -354,6 +427,13 @@ fi
 if [ "$1" = "openclaw" ] && [ "$2" = "chat" ]; then
   cat <<'EOF'
 {"action":"chat","response_id":"msg-1","message":"ok"}
+EOF
+  exit 0
+fi
+
+if [ "$1" = "claude" ] && [ "$2" = "exec" ]; then
+  cat <<'EOF'
+{"action":"exec","response_id":"msg-claude-1","reply":"hello from claude","message":"ok"}
 EOF
   exit 0
 fi

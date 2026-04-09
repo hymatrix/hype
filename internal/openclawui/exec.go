@@ -37,6 +37,21 @@ func runOpenclaw(ctx context.Context, cfg Config, subcmd string, req openclawReq
 	return runCommandWithArgs(ctx, cfg, "openclaw", subcmd, args, store, start)
 }
 
+func runClaude(ctx context.Context, cfg Config, subcmd string, req openclawRequest, store *spawnStore) (runResult, error) {
+	if store == nil {
+		store = &spawnStore{}
+	}
+
+	start := time.Now()
+	args, cleanup, err := buildCommandArgs("claude", subcmd, req)
+	if err != nil {
+		return runResult{}, err
+	}
+	defer cleanup()
+
+	return runCommandWithArgs(ctx, cfg, "claude", subcmd, args, store, start)
+}
+
 func runVmdocker(ctx context.Context, cfg Config, subcmd string, req openclawRequest, store *spawnStore) (runResult, error) {
 	if store == nil {
 		store = &spawnStore{}
@@ -121,7 +136,7 @@ func runCommandWithArgs(ctx context.Context, cfg Config, root, subcmd string, ar
 		StderrRaw: strings.TrimSpace(stderr.String()),
 	}
 
-	if root == "openclaw" && result.StdoutRaw != "" {
+	if (root == "openclaw" || root == "claude") && result.StdoutRaw != "" {
 		if parsed, ok := parseJSONFromMixedOutput(result.StdoutRaw); ok {
 			result.ParsedJSON = parsed
 			if subcmd == "spawn" && runErr == nil {
@@ -158,6 +173,9 @@ func buildCommandArgs(root, subcmd string, req openclawRequest) ([]string, func(
 	case "openclaw":
 		args, err := buildOpenclawArgs(subcmd, req)
 		return args, func() {}, err
+	case "claude":
+		args, err := buildClaudeArgs(subcmd, req)
+		return args, func() {}, err
 	case "vmdocker":
 		return buildVmdockerArgs(subcmd, req)
 	default:
@@ -173,6 +191,14 @@ func buildArgsForPath(path []string, values map[string]any, importedEnv *importe
 			subcmd = path[1]
 		}
 		args, err := buildOpenclawArgs(subcmd, buildOpenclawRequest(values, importedEnv))
+		return args, func() {}, err
+	}
+	if root == "claude" {
+		subcmd := ""
+		if len(path) > 1 {
+			subcmd = path[1]
+		}
+		args, err := buildClaudeArgs(subcmd, buildOpenclawRequest(values, importedEnv))
 		return args, func() {}, err
 	}
 	if root == "vmdocker" {
@@ -228,6 +254,7 @@ func buildOpenclawRequest(values map[string]any, importedEnv *importedEnvPayload
 		GatewayToken:   stringValue(values["gateway-token"]),
 		RuntimeBackend: stringValue(values["runtime-backend"]),
 		PID:            stringValue(values["pid"]),
+		Prompt:         stringValue(values["prompt"]),
 		BotToken:       stringValue(values["bot-token"]),
 		DefaultAccount: stringValue(values["default-account"]),
 		DMPolicy:       stringValue(values["dm-policy"]),
@@ -235,6 +262,8 @@ func buildOpenclawRequest(values map[string]any, importedEnv *importedEnvPayload
 		Code:           stringValue(values["code"]),
 		Channel:        stringValue(values["channel"]),
 		Command:        stringValue(values["command"]),
+		BaseURL:        stringValue(values["base-url"]),
+		CodeFlags:      stringValue(values["code-flags"]),
 		Dir:            stringValue(values["dir"]),
 		Version:        stringValue(values["version"]),
 	}
@@ -588,6 +617,76 @@ func buildOpenclawArgs(subcmd string, req openclawRequest) ([]string, error) {
 		args = append(args,
 			"--pid", strings.TrimSpace(req.PID),
 			"--command", strings.TrimSpace(req.Command),
+		)
+	default:
+		return nil, fmt.Errorf("%w: unsupported command %q", errValidation, subcmd)
+	}
+
+	return args, nil
+}
+
+func buildClaudeArgs(subcmd string, req openclawRequest) ([]string, error) {
+	nodeURL := strings.TrimSpace(req.NodeURL)
+	if nodeURL == "" {
+		nodeURL = defaultNodeURL
+	}
+
+	args := []string{"claude", subcmd, "--json", "--node-url", nodeURL}
+	if key := strings.TrimSpace(req.PrivateKey); key != "" {
+		args = append(args, "--private-key", key)
+	}
+
+	switch subcmd {
+	case "spawn":
+		if err := requireFields(map[string]string{
+			"moduleId":  req.ModuleID,
+			"scheduler": req.Scheduler,
+			"apiKey":    req.APIKey,
+		}); err != nil {
+			return nil, err
+		}
+		runtimeBackend := strings.TrimSpace(req.RuntimeBackend)
+		if runtimeBackend != "" && runtimeBackend != runtimeBackendDocker && runtimeBackend != runtimeBackendSandbox {
+			return nil, fmt.Errorf("%w: runtimeBackend must be empty, %q, or %q", errValidation, runtimeBackendDocker, runtimeBackendSandbox)
+		}
+		args = append(args,
+			"--module-id", strings.TrimSpace(req.ModuleID),
+			"--scheduler", strings.TrimSpace(req.Scheduler),
+			"--api-key", strings.TrimSpace(req.APIKey),
+		)
+		if value := strings.TrimSpace(req.BaseURL); value != "" {
+			args = append(args, "--base-url", value)
+		}
+		if value := strings.TrimSpace(req.Model); value != "" {
+			args = append(args, "--model", value)
+		}
+		if value := strings.TrimSpace(req.CodeFlags); value != "" {
+			args = append(args, "--code-flags", value)
+		}
+		if runtimeBackend != "" {
+			args = append(args, "--runtime-backend", runtimeBackend)
+		}
+	case "chat":
+		if err := requireFields(map[string]string{
+			"pid":     req.PID,
+			"command": req.Command,
+		}); err != nil {
+			return nil, err
+		}
+		args = append(args,
+			"--pid", strings.TrimSpace(req.PID),
+			"--command", strings.TrimSpace(req.Command),
+		)
+	case "exec":
+		if err := requireFields(map[string]string{
+			"pid":    req.PID,
+			"prompt": req.Prompt,
+		}); err != nil {
+			return nil, err
+		}
+		args = append(args,
+			"--pid", strings.TrimSpace(req.PID),
+			"--prompt", strings.TrimSpace(req.Prompt),
 		)
 	default:
 		return nil, fmt.Errorf("%w: unsupported command %q", errValidation, subcmd)

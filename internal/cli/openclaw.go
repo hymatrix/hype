@@ -465,6 +465,9 @@ func readOpenclawSharedFlags(cmd *cobra.Command) (openclawSharedFlags, error) {
 		privateKey = strings.TrimSpace(os.Getenv("PRV_KEY"))
 	}
 	if strings.TrimSpace(privateKey) == "" {
+		privateKey = strings.TrimSpace(os.Getenv("VMDOCKER_PRIVATE_KEY"))
+	}
+	if strings.TrimSpace(privateKey) == "" {
 		return openclawSharedFlags{}, errors.New("private-key is required")
 	}
 
@@ -476,20 +479,7 @@ func readOpenclawSharedFlags(cmd *cobra.Command) (openclawSharedFlags, error) {
 }
 
 func hydrateOpenclawPrivateKeyFlag(cmd *cobra.Command) error {
-	v, err := cmd.Flags().GetString("private-key")
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(v) != "" {
-		return nil
-	}
-	if env := strings.TrimSpace(os.Getenv("HYPE_PRIVATE_KEY")); env != "" {
-		return cmd.Flags().Set("private-key", env)
-	}
-	if env := strings.TrimSpace(os.Getenv("PRV_KEY")); env != "" {
-		return cmd.Flags().Set("private-key", env)
-	}
-	return nil
+	return hydrateFlagFromEnvs(cmd, "private-key", "HYPE_PRIVATE_KEY", "PRV_KEY", "VMDOCKER_PRIVATE_KEY")
 }
 
 func buildOpenclawSpawnTags(model, provider, apiKey, gatewayToken, runtimeBackend string) ([]goarSchema.Tag, error) {
@@ -520,12 +510,10 @@ func buildOpenclawSpawnTags(model, provider, apiKey, gatewayToken, runtimeBacken
 
 	runtimeBackend = strings.TrimSpace(runtimeBackend)
 	if runtimeBackend != "" {
-		switch runtimeBackend {
-		case openclawRuntimeDocker, openclawRuntimeSandbox:
-			tags = append(tags, goarSchema.Tag{Name: "Runtime-Backend", Value: runtimeBackend})
-		default:
-			return nil, fmt.Errorf("runtime-backend must be one of %q or %q", openclawRuntimeDocker, openclawRuntimeSandbox)
+		if err := validateRuntimeBackend(runtimeBackend); err != nil {
+			return nil, err
 		}
+		tags = append(tags, goarSchema.Tag{Name: "Runtime-Backend", Value: runtimeBackend})
 	}
 
 	return tags, nil

@@ -106,6 +106,7 @@ type openclawRequest struct {
 	GatewayToken   string `json:"gatewayToken"`
 	RuntimeBackend string `json:"runtimeBackend"`
 	PID            string `json:"pid"`
+	Prompt         string `json:"prompt"`
 	BotToken       string `json:"botToken"`
 	DefaultAccount string `json:"defaultAccount"`
 	DMPolicy       string `json:"dmPolicy"`
@@ -113,6 +114,8 @@ type openclawRequest struct {
 	Code           string `json:"code"`
 	Channel        string `json:"channel"`
 	Command        string `json:"command"`
+	BaseURL        string `json:"baseUrl"`
+	CodeFlags      string `json:"codeFlags"`
 	Dir            string `json:"dir"`
 	Version        string `json:"version"`
 	EnvFileName    string `json:"envFileName"`

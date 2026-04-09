@@ -49,4 +49,15 @@ const (
 	usage_openclaw_command         = "Chat command text"
 	usage_openclaw_ui_listen       = "Listen address for Openclaw Web UI"
 	usage_openclaw_ui_timeout_ms   = "Command timeout in milliseconds for Openclaw Web UI"
+
+	usage_claude_module_id       = "Claude module id"
+	usage_claude_scheduler       = "Scheduler address"
+	usage_claude_api_key         = "Anthropic API key"
+	usage_claude_base_url        = "Anthropic API base URL"
+	usage_claude_model           = "Anthropic model name"
+	usage_claude_code_flags      = "Additional Claude Code CLI flags"
+	usage_claude_runtime_backend = "Runtime backend for spawn (docker or sandbox)"
+	usage_claude_command         = "Claude command text"
+	usage_claude_prompt          = "Claude prompt text"
+	usage_claude_pid_for_prompt  = "Target Claude process id for prompt execution"
 )

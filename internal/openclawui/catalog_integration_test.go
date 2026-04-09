@@ -64,7 +64,7 @@ func TestCatalogRouteListsExpectedCommands(t *testing.T) {
 		t.Fatalf("expected ok response, got %#v", body)
 	}
 
-	expectedRoots := []string{"new", "get", "vmm", "mount", "module", "run", "openclaw", "ui", "version", "vmdocker", "repl", "db-import", "db-export"}
+	expectedRoots := []string{"new", "get", "vmm", "mount", "module", "run", "openclaw", "claude", "ui", "version", "vmdocker", "repl", "db-import", "db-export"}
 	for _, name := range expectedRoots {
 		if !hasRoot(body.Roots, name) {
 			t.Fatalf("expected root %q in catalog", name)
@@ -136,6 +136,28 @@ func TestCatalogRouteIncludesRequiredAndEnvMappedFields(t *testing.T) {
 	}
 	if field := findField(chat.Fields, "command"); field == nil || !field.Required || field.Kind != "multiline" {
 		t.Fatalf("expected openclaw chat.command to be required multiline field, got %#v", field)
+	}
+
+	claudeSpawn := findCommand(body.Roots, []string{"claude", "spawn"})
+	if claudeSpawn == nil {
+		t.Fatal("expected claude spawn catalog entry")
+	}
+	if field := findField(claudeSpawn.Fields, "module-id"); field == nil || !field.Required || !contains(field.EnvKeys, "VMDOCKER_MODULE_ID") {
+		t.Fatalf("expected claude spawn.module-id to be required with VMDOCKER_MODULE_ID, got %#v", field)
+	}
+	if field := findField(claudeSpawn.Fields, "api-key"); field == nil || !field.Required || !contains(field.EnvKeys, "ANTHROPIC_API_KEY") {
+		t.Fatalf("expected claude spawn.api-key to be required with ANTHROPIC_API_KEY, got %#v", field)
+	}
+	if field := findField(claudeSpawn.Fields, "runtime-backend"); field == nil || !contains(field.EnvKeys, "RUNTIME_BACKEND") {
+		t.Fatalf("expected claude spawn.runtime-backend to expose RUNTIME_BACKEND, got %#v", field)
+	}
+
+	claudeExec := findCommand(body.Roots, []string{"claude", "exec"})
+	if claudeExec == nil {
+		t.Fatal("expected claude exec catalog entry")
+	}
+	if field := findField(claudeExec.Fields, "prompt"); field == nil || !field.Required || field.Kind != "multiline" {
+		t.Fatalf("expected claude exec.prompt to be required multiline field, got %#v", field)
 	}
 }
 
@@ -213,6 +235,32 @@ func TestRunRouteBuildsExpectedCommands(t *testing.T) {
 				`--module-id mod-1`,
 				`--scheduler sched-1`,
 				`--gateway-token ***`,
+			},
+		},
+		{
+			name: "claude spawn",
+			body: `{"path":["claude","spawn"],"values":{"node-url":"http://127.0.0.1:8080","private-key":"0xabc","module-id":"mod-1","scheduler":"sched-1","api-key":"anthropic-key","base-url":"https://proxy.example","model":"claude-sonnet","runtime-backend":"sandbox"}}`,
+			fragments: []string{
+				`hype claude spawn `,
+				`--json`,
+				`--node-url http://127.0.0.1:8080`,
+				`--private-key ***`,
+				`--module-id mod-1`,
+				`--scheduler sched-1`,
+				`--api-key ***`,
+				`--base-url https://proxy.example`,
+				`--model claude-sonnet`,
+				`--runtime-backend sandbox`,
+			},
+		},
+		{
+			name: "claude exec",
+			body: `{"path":["claude","exec"],"values":{"node-url":"http://127.0.0.1:8080","private-key":"0xabc","pid":"pid-1","prompt":"hello claude"}}`,
+			fragments: []string{
+				`hype claude exec `,
+				`--json`,
+				`--pid pid-1`,
+				`--prompt hello claude`,
 			},
 		},
 		{

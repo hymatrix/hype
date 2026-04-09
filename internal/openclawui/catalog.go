@@ -394,6 +394,43 @@ func fieldOverlayFor(path []string, flagName string) fieldOverlay {
 		case "pid", "command":
 			return merge(fieldOverlay{Required: true, Kind: mapCommandKind(flagName)})
 		}
+	case "claude/spawn":
+		switch flagName {
+		case "module-id":
+			return merge(fieldOverlay{Required: true, EnvKeys: []string{"VMDOCKER_MODULE_ID"}})
+		case "scheduler":
+			return merge(fieldOverlay{Required: true, EnvKeys: []string{"VMDOCKER_SCHEDULER"}})
+		case "api-key":
+			return merge(fieldOverlay{Required: true, Kind: "secret", EnvKeys: []string{"ANTHROPIC_API_KEY"}})
+		case "base-url":
+			return merge(fieldOverlay{EnvKeys: []string{"ANTHROPIC_BASE_URL"}})
+		case "model":
+			return merge(fieldOverlay{EnvKeys: []string{"ANTHROPIC_MODEL"}})
+		case "code-flags":
+			return merge(fieldOverlay{Kind: "multiline", EnvKeys: []string{"CLAUDE_CODE_FLAGS"}})
+		case "runtime-backend":
+			return merge(fieldOverlay{
+				Kind: "enum",
+				Options: []fieldOption{
+					{Label: "auto", Value: ""},
+					{Label: "docker", Value: "docker"},
+					{Label: "sandbox", Value: "sandbox"},
+				},
+				EnvKeys: []string{"RUNTIME_BACKEND"},
+			})
+		}
+	case "claude/chat":
+		switch flagName {
+		case "pid", "command":
+			return merge(fieldOverlay{Required: true, Kind: mapCommandKind(flagName)})
+		}
+	case "claude/exec":
+		switch flagName {
+		case "pid":
+			return merge(fieldOverlay{Required: true})
+		case "prompt":
+			return merge(fieldOverlay{Required: true, Kind: "multiline"})
+		}
 	case "vmdocker/get":
 		if flagName == "dir" {
 			return merge(fieldOverlay{Kind: "path"})
@@ -417,6 +454,8 @@ func genericFieldOverlay(flagName string) fieldOverlay {
 	case "dir", "file", "out":
 		return fieldOverlay{Kind: "path"}
 	case "command":
+		return fieldOverlay{Kind: "multiline"}
+	case "prompt":
 		return fieldOverlay{Kind: "multiline"}
 	case "redis-url":
 		return fieldOverlay{

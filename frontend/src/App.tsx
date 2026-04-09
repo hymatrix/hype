@@ -14,12 +14,19 @@ import type {
 
 const importedEnvPreviewKeys = [
   'VMDOCKER_PRIVATE_KEY',
+  'VMDOCKER_MODULE_ID',
+  'VMDOCKER_SCHEDULER',
+  'RUNTIME_BACKEND',
   'OPENCLAW_MODULE_ID',
   'OPENCLAW_MODEL',
   'OPENCLAW_PROVIDER',
   'OPENCLAW_API_KEY',
   'OPENCLAW_GATEWAY_TOKEN',
   'OPENCLAW_TELEGRAM_BOT_TOKEN',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_MODEL',
+  'CLAUDE_CODE_FLAGS',
   'REDIS_URL',
 ] as const
 
@@ -394,7 +401,7 @@ export function App() {
               )}
             </section>
 
-            {activeCommandKey === 'openclaw/spawn' && (
+            {(activeCommandKey === 'openclaw/spawn' || activeCommandKey === 'claude/spawn') && (
               <section className="spawn-pids" aria-live="polite">
                 <div className="result-head">
                   <h2>Spawned PIDs</h2>

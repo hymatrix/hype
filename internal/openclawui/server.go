@@ -204,6 +204,8 @@ func registerAPIRoutes(mux *http.ServeMux, cfg Config, store *spawnStore) {
 			switch root {
 			case "openclaw":
 				result, err = runOpenclaw(r.Context(), cfg, subcmd, req, store)
+			case "claude":
+				result, err = runClaude(r.Context(), cfg, subcmd, req, store)
 			case "vmdocker":
 				result, err = runVmdocker(r.Context(), cfg, subcmd, req, store)
 			default:
@@ -263,6 +265,9 @@ func registerAPIRoutes(mux *http.ServeMux, cfg Config, store *spawnStore) {
 	mux.HandleFunc("POST /api/openclaw/conf-tg", handleCommand("openclaw", "conf-tg"))
 	mux.HandleFunc("POST /api/openclaw/pair-tg", handleCommand("openclaw", "pair-tg"))
 	mux.HandleFunc("POST /api/openclaw/chat", handleCommand("openclaw", "chat"))
+	mux.HandleFunc("POST /api/claude/spawn", handleCommand("claude", "spawn"))
+	mux.HandleFunc("POST /api/claude/chat", handleCommand("claude", "chat"))
+	mux.HandleFunc("POST /api/claude/exec", handleCommand("claude", "exec"))
 	mux.HandleFunc("POST /api/vmdocker/get", handleCommand("vmdocker", "get"))
 	mux.HandleFunc("POST /api/vmdocker/init", handleCommand("vmdocker", "init"))
 }
