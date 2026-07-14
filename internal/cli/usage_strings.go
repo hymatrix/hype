@@ -10,6 +10,9 @@ const (
 	usage_vmdocker_dir      = "Target VMDocker directory"
 	usage_vmdocker_env_file = "Path to the .env file used for examples init"
 
+	usage_vmdocker_profile_dir  = "Target agent profile directory"
+	usage_vmdocker_profile_from = "Full base image name"
+
 	usage_vmm_name   = "Name of the vmm"
 	usage_vmm_format = "Module format of the vmm"
 
