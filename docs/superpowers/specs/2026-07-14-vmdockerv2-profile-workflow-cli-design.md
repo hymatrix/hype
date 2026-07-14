@@ -178,9 +178,16 @@ paths, and runs the following command from the VMDocker V2 checkout:
 go run ./cmd/module --profile <absolute-profile> --agent-bin <absolute-agent-bin>
 ```
 
-The adapter path falls back to `VMDOCKER_AGENT_BIN`. `hype` does not build it. The node URL and private
-key are passed to the child process as `VMDOCKER_URL` and `VMDOCKER_PRIVATE_KEY`. The child retains its
-native `.env` behavior, including `VMDOCKER_ENV_FILE` and the checkout-root `.env` fallback.
+`hype` resolves delegated-build inputs before starting the child. Precedence is CLI flag, current
+process environment, the file selected by `VMDOCKER_ENV_FILE` (or `<checkout>/.env` when unset), then
+the documented default. The adapter uses `VMDOCKER_AGENT_BIN` and has no default; it must resolve to an
+existing regular file. The node URL uses `VMDOCKER_URL` and defaults to `http://127.0.0.1:8080`. The
+private key uses `VMDOCKER_PRIVATE_KEY`, with the existing `HYPE_PRIVATE_KEY` and `PRV_KEY` aliases
+accepted from the current process before consulting the file.
+
+The resolved node URL and private key are injected as `VMDOCKER_URL` and `VMDOCKER_PRIVATE_KEY`, and
+the resolved adapter path is always passed through `--agent-bin`. The child still runs its native
+`.env` loader, but these explicit process values take precedence. `hype` does not build the adapter.
 
 The command streams stdout and stderr so Docker build progress remains visible. It does not parse,
 duplicate, or reimplement the VMDocker V2 profile builder. The final module ID remains part of the
@@ -216,6 +223,7 @@ The module ID, scheduler, and runtime backend fall back to `VMDOCKER_MODULE_ID`,
 `VMDOCKER_SCHEDULER`, and `RUNTIME_BACKEND`. Runtime type falls back to `RUNTIME_TYPE`. The private key
 uses the existing precedence `--private-key`, `VMDOCKER_PRIVATE_KEY`, `HYPE_PRIVATE_KEY`, then
 `PRV_KEY`. The node URL falls back to `VMDOCKER_URL`, then `http://127.0.0.1:8080`.
+Because spawn is an in-process SDK operation, it does not read the VMDocker checkout's `.env` file.
 
 Human output reports the successful process ID. JSON output uses the existing structured runtime
 result style. Neither form echoes container environment values.
@@ -231,12 +239,13 @@ hype vmdocker export \
 ```
 
 `export` uses `SendMessageAndWait` with `Action=Export`. The SDK response's `Message` field contains a
-JSON-encoded VMM result. `hype` decodes only the required `Data` and `Error` fields, avoiding a direct
-dependency on VMDocker V2 internal packages. A non-empty `Error`, malformed JSON, or empty `Data` is a
-command failure. Successful `Data` is the exported module ID.
+JSON-encoded `vmmSchema.VmmResult`, which is already provided by `hype`'s Hymx dependency. A non-empty
+`Error`, malformed JSON, or empty `Data` is a command failure. Successful `Data` is the exported
+module ID; no VMDocker V2 internal package is imported.
 
 The pid falls back to `VMDOCKER_EXPORT_PID`. Node URL and private-key precedence match `spawn`.
-Human and JSON output report the module ID without modifying `.env`.
+Human and JSON output report the module ID without modifying `.env`. Like spawn, export does not read
+the VMDocker checkout's `.env` file.
 
 ## Component changes
 
