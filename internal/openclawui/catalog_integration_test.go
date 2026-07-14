@@ -263,15 +263,6 @@ func TestRunRouteBuildsExpectedCommands(t *testing.T) {
 				`--prompt hello claude`,
 			},
 		},
-		{
-			name: "vmdocker get",
-			body: `{"path":["vmdocker","get"],"values":{"dir":"./vmdocker","version":"v0.0.1"}}`,
-			fragments: []string{
-				`hype vmdocker get `,
-				`--dir ./vmdocker`,
-				`--version v0.0.1`,
-			},
-		},
 	}
 
 	for _, tc := range testCases {

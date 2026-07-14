@@ -23,9 +23,9 @@ func newVmdockerCmd() *cobra.Command {
 func newVmdockerGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get",
-		Short: "Fetch a VMDocker release and build hymx-node",
+		Short: "Fetch a VMDocker ref and build hymx-node",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			version, err := cmd.Flags().GetString("version")
+			ref, err := cmd.Flags().GetString("ref")
 			if err != nil {
 				return err
 			}
@@ -37,7 +37,7 @@ func newVmdockerGetCmd() *cobra.Command {
 			manager := vmdockerpkg.NewManager()
 			ctx := commandContext(cmd)
 
-			tag, binaryPath, err := manager.Get(ctx, dir, version)
+			resolvedRef, binaryPath, err := manager.Get(ctx, dir, ref)
 			if err != nil {
 				return err
 			}
@@ -45,14 +45,14 @@ func newVmdockerGetCmd() *cobra.Command {
 			absDir := filepath.Dir(filepath.Dir(binaryPath))
 			out := cmd.OutOrStdout()
 			_, _ = out.Write([]byte("vmdocker directory: " + absDir + "\n"))
-			_, _ = out.Write([]byte("vmdocker version: " + tag + "\n"))
+			_, _ = out.Write([]byte("vmdocker ref: " + resolvedRef + "\n"))
 			_, _ = out.Write([]byte("vmdocker binary: " + binaryPath + "\n"))
 			return nil
 		},
 	}
 
-	cmd.Flags().String("version", "", usage_vmdocker_version)
-	cmd.Flags().String("dir", "./vmdocker", usage_vmdocker_dir)
+	cmd.Flags().String("ref", vmdockerpkg.DefaultRef, usage_vmdocker_ref)
+	cmd.Flags().String("dir", "./vmdockerv2", usage_vmdocker_dir)
 	return cmd
 }
 
@@ -85,7 +85,7 @@ func newVmdockerInitCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().String("dir", "./vmdocker", usage_vmdocker_dir)
+	cmd.Flags().String("dir", "./vmdockerv2", usage_vmdocker_dir)
 	cmd.Flags().String("env-file", "", usage_vmdocker_env_file)
 	return cmd
 }

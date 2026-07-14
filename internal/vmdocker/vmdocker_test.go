@@ -54,18 +54,18 @@ func (c *fakeConn) SetDeadline(time.Time) error      { return nil }
 func (c *fakeConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *fakeConn) SetWriteDeadline(time.Time) error { return nil }
 
-func TestLatestSemverTagChoosesHighestVersion(t *testing.T) {
-	tag, err := LatestSemverTag(strings.Join([]string{
-		"abc refs/tags/v0.0.1",
-		"def refs/tags/v0.0.2",
-		"ghi refs/tags/v0.1.0-rc.1",
-		"jkl refs/tags/v0.1.0",
-	}, "\n"))
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if tag != "v0.1.0" {
-		t.Fatalf("expected latest tag v0.1.0, got %s", tag)
+func newTestManager(runner *fakeRunner) *Manager {
+	return &Manager{
+		runner:    runner,
+		httpGet:   func(string) (int, error) { return 200, nil },
+		stat:      os.Stat,
+		readDir:   os.ReadDir,
+		readFile:  os.ReadFile,
+		writeFile: os.WriteFile,
+		mkdirAll:  os.MkdirAll,
+		sleep:     func(time.Duration) {},
+		listen:    net.Listen,
+		glob:      filepath.Glob,
 	}
 }
 
@@ -122,158 +122,73 @@ func TestGetRejectsNonRepoDirectory(t *testing.T) {
 			return "", nil
 		},
 	}
-	manager := &Manager{
-		runner:    runner,
-		httpGet:   func(string) (int, error) { return 200, nil },
-		stat:      os.Stat,
-		readDir:   os.ReadDir,
-		readFile:  os.ReadFile,
-		writeFile: os.WriteFile,
-		mkdirAll:  os.MkdirAll,
-		sleep:     func(time.Duration) {},
-		listen:    net.Listen,
-		glob:      filepath.Glob,
-	}
+	manager := newTestManager(runner)
 
-	if _, _, err := manager.Get(context.Background(), dir, "v0.0.2"); err == nil || !strings.Contains(err.Error(), "not a vmdocker git repository") {
+	if _, _, err := manager.Get(context.Background(), dir, "feature/profile"); err == nil || !strings.Contains(err.Error(), "not a vmdockerv2 git repository") {
 		t.Fatalf("expected repo mismatch error, got %v", err)
 	}
 }
 
-func TestGetSkipsBuildWhenTargetReady(t *testing.T) {
-	dir := t.TempDir()
-	buildDir := filepath.Join(dir, "build")
-	if err := os.MkdirAll(buildDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "cmd"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(buildDir, "hymx-node"), []byte("bin"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
+func TestGetDefaultsToMainAndBuildsV2(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "vmdockerv2")
 	runner := &fakeRunner{
 		run: func(dir string, env []string, name string, args ...string) (string, error) {
-			switch {
-			case name == "git" && strings.Join(args, " ") == "remote get-url origin":
+			switch strings.Join(append([]string{name}, args...), " ") {
+			case "git remote get-url origin":
 				return RepoURL, nil
-			case name == "git" && strings.Join(args, " ") == "describe --tags --exact-match":
-				return "v0.0.2", nil
-			default:
+			case "git rev-parse FETCH_HEAD":
+				return "new-commit", nil
+			case "git rev-parse HEAD":
+				return "old-commit", nil
+			case "git status --short --untracked-files=no":
 				return "", nil
 			}
+			return "", nil
 		},
 	}
-	manager := &Manager{
-		runner:    runner,
-		httpGet:   func(string) (int, error) { return 200, nil },
-		stat:      os.Stat,
-		readDir:   os.ReadDir,
-		readFile:  os.ReadFile,
-		writeFile: os.WriteFile,
-		mkdirAll:  os.MkdirAll,
-		sleep:     func(time.Duration) {},
-		listen:    net.Listen,
-		glob:      filepath.Glob,
-	}
-
-	tag, binaryPath, err := manager.Get(context.Background(), dir, "v0.0.2")
+	manager := newTestManager(runner)
+	ref, binaryPath, err := manager.Get(context.Background(), dir, "")
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatal(err)
 	}
-	if tag != "v0.0.2" {
-		t.Fatalf("expected target tag, got %s", tag)
+	if ref != "main" {
+		t.Fatalf("ref = %q", ref)
 	}
 	if binaryPath != filepath.Join(dir, "build", "hymx-node") {
-		t.Fatalf("unexpected binary path: %s", binaryPath)
+		t.Fatalf("binary = %q", binaryPath)
 	}
-	for _, call := range runner.calls {
-		if strings.Contains(call, "go mod tidy") || strings.Contains(call, "go build") {
-			t.Fatalf("did not expect build pipeline call, got %#v", runner.calls)
+	for _, want := range []string{
+		"git clone https://github.com/cryptowizard0/vmdockerv2.git " + dir,
+		"git fetch --force origin main",
+		"git checkout --detach new-commit",
+		"go mod tidy",
+		"go build -o ./build/hymx-node ./cmd",
+	} {
+		if !containsCall(runner.calls, want) {
+			t.Fatalf("missing %q in %#v", want, runner.calls)
 		}
 	}
 }
 
-func TestGetRunsTidyBeforeBuild(t *testing.T) {
-	dir := t.TempDir()
+func TestGetRefusesDirtyCheckoutBeforeSwitch(t *testing.T) {
 	runner := &fakeRunner{
 		run: func(dir string, env []string, name string, args ...string) (string, error) {
-			switch {
-			case name == "git" && strings.Join(args, " ") == "remote get-url origin":
+			switch strings.Join(append([]string{name}, args...), " ") {
+			case "git remote get-url origin":
 				return RepoURL, nil
-			case name == "git" && strings.Join(args, " ") == "describe --tags --exact-match":
-				return "v0.0.2", nil
-			default:
-				return "", nil
+			case "git rev-parse FETCH_HEAD":
+				return "new-commit", nil
+			case "git rev-parse HEAD":
+				return "old-commit", nil
+			case "git status --short --untracked-files=no":
+				return " M go.mod", nil
 			}
+			return "", nil
 		},
 	}
-	manager := &Manager{
-		runner:   runner,
-		httpGet:  func(string) (int, error) { return 200, nil },
-		stat:     os.Stat,
-		readFile: os.ReadFile,
-		sleep:    func(time.Duration) {},
-		listen:   net.Listen,
-		glob:     filepath.Glob,
-	}
-
-	if _, _, err := manager.Get(context.Background(), dir, "v0.0.2"); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	tidyIndex := callIndex(runner.calls, "go mod tidy")
-	buildIndex := callIndex(runner.calls, "go build -o ./build/hymx-node ./cmd")
-	if tidyIndex == -1 || buildIndex == -1 || tidyIndex > buildIndex {
-		t.Fatalf("expected go mod tidy before go build, got %#v", runner.calls)
-	}
-}
-
-func TestGetRebuildsWhenCheckoutMovesToNewTag(t *testing.T) {
-	dir := t.TempDir()
-	buildDir := filepath.Join(dir, "build")
-	if err := os.MkdirAll(buildDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(buildDir, "hymx-node"), []byte("old-bin"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	runner := &fakeRunner{
-		run: func(dir string, env []string, name string, args ...string) (string, error) {
-			switch {
-			case name == "git" && strings.Join(args, " ") == "remote get-url origin":
-				return RepoURL, nil
-			case name == "git" && strings.Join(args, " ") == "describe --tags --exact-match":
-				return "v0.0.1", nil
-			default:
-				return "", nil
-			}
-		},
-	}
-	manager := &Manager{
-		runner:   runner,
-		httpGet:  func(string) (int, error) { return 200, nil },
-		stat:     os.Stat,
-		readFile: os.ReadFile,
-		sleep:    func(time.Duration) {},
-		listen:   net.Listen,
-		glob:     filepath.Glob,
-	}
-
-	if _, _, err := manager.Get(context.Background(), dir, "v0.0.2"); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	fetchIndex := callIndex(runner.calls, "git fetch --tags --force origin")
-	checkoutIndex := callIndex(runner.calls, "git checkout --detach v0.0.2")
-	tidyIndex := callIndex(runner.calls, "go mod tidy")
-	buildIndex := callIndex(runner.calls, "go build -o ./build/hymx-node ./cmd")
-	if fetchIndex == -1 || checkoutIndex == -1 || tidyIndex == -1 || buildIndex == -1 {
-		t.Fatalf("expected fetch, checkout, and build pipeline calls, got %#v", runner.calls)
-	}
-	if !(fetchIndex < checkoutIndex && checkoutIndex < tidyIndex && tidyIndex < buildIndex) {
-		t.Fatalf("expected fetch -> checkout -> tidy -> build order, got %#v", runner.calls)
+	_, _, err := newTestManager(runner).Get(context.Background(), t.TempDir(), "feature/profile")
+	if err == nil || !strings.Contains(err.Error(), "tracked changes") {
+		t.Fatalf("expected tracked changes error, got %v", err)
 	}
 }
 
