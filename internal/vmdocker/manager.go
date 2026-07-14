@@ -27,6 +27,7 @@ type Manager struct {
 	glob      func(pattern string) ([]string, error)
 	kill      func(int, syscall.Signal) error
 	out       io.Writer
+	errOut    io.Writer
 }
 
 func NewManager() *Manager {
@@ -50,6 +51,10 @@ func NewManager() *Manager {
 
 func (m *Manager) SetOutput(out io.Writer) {
 	m.out = out
+}
+
+func (m *Manager) SetErrorOutput(out io.Writer) {
+	m.errOut = out
 }
 
 func (m *Manager) printf(format string, args ...any) {

@@ -13,6 +13,12 @@ const (
 	usage_vmdocker_profile_dir  = "Target agent profile directory"
 	usage_vmdocker_profile_from = "Full base image name"
 
+	usage_vmdocker_checkout_dir = "Target VMDocker V2 checkout"
+	usage_vmdocker_profile      = "Path to profile.toml"
+	usage_vmdocker_agent_bin    = "Path to vmdocker-agent binary"
+	usage_vmdocker_node_url     = "Node URL"
+	usage_vmdocker_private_key  = "Module signing private key"
+
 	usage_vmm_name   = "Name of the vmm"
 	usage_vmm_format = "Module format of the vmm"
 

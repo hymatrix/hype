@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,8 +15,9 @@ import (
 )
 
 type fakeRunner struct {
-	calls []string
-	run   func(dir string, env []string, name string, args ...string) (string, error)
+	calls     []string
+	run       func(dir string, env []string, name string, args ...string) (string, error)
+	runStream func(dir string, env []string, stdout, stderr io.Writer, name string, args ...string) error
 }
 
 func (f *fakeRunner) Output(_ context.Context, dir string, env []string, name string, args ...string) (string, error) {
@@ -25,6 +27,15 @@ func (f *fakeRunner) Output(_ context.Context, dir string, env []string, name st
 		return "", nil
 	}
 	return f.run(dir, env, name, args...)
+}
+
+func (f *fakeRunner) Run(_ context.Context, dir string, env []string, stdout, stderr io.Writer, name string, args ...string) error {
+	call := strings.TrimSpace(strings.Join(append([]string{name}, args...), " "))
+	f.calls = append(f.calls, call)
+	if f.runStream == nil {
+		return nil
+	}
+	return f.runStream(dir, env, stdout, stderr, name, args...)
 }
 
 type fakeListener struct {
