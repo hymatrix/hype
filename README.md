@@ -46,8 +46,12 @@ Claude command usage guide:
   - `hype mount --name <vmm>`
   - `hype module --name <module> [-u <nodeURL>] [-k <privateKey>]`
   - `hype run [--mode <mode>]`
-  - `hype vmdocker get [--version <tag>] [--dir <path>]`
-  - `hype vmdocker init [--dir <path>] --env-file <path>`
+  - `hype vmdocker get [--dir ./vmdockerv2] [--ref main]`
+  - `hype vmdocker init [--dir ./vmdockerv2] --env-file <path>`
+  - `hype vmdocker profile init --dir <agent-dir> --from <base-image>`
+  - `hype vmdocker module build --dir ./vmdockerv2 --profile <profile.toml> --agent-bin <vmdocker-agent> --private-key <key>`
+  - `hype vmdocker spawn --module-id <id> --scheduler <address> --runtime-type <type> [--runtime-backend docker|sandbox] [--env KEY=VALUE]`
+  - `hype vmdocker export --pid <pid> --private-key <key>`
   - `hype db-import --redis-url <redisURL> --file <jsonl> [--force]`
   - `hype db-export --redis-url <redisURL> --pid <pid> --out <out> [--progress-every <n>]`
   - `hype openclaw spawn -m <moduleId> -s <scheduler> [--model <model>] [--provider <provider>] [--api-key <key>] --gateway-token <token> [--runtime-backend <docker|sandbox>] [--bot-token <token> --default-account <account> --dm-policy <policy> --allow-from <value>] -k <privateKey> [-u <nodeURL>]`
@@ -132,26 +136,31 @@ Claude command usage guide:
   - From the generated project root, runs the `cmd/main.go` entrypoint.
 
 ### Command: vmdocker
-- Description: Fetch and initialize a local `vmdocker` runtime for development.
+- Description: Fetch and use the VMDocker V2 profile workflow from the CLI.
 - Subcommands:
-  - `get`: clone a `vmdocker` release tag and build `build/hymx-node`
+  - `get`: clone a `vmdockerv2` ref and build `build/hymx-node`
   - `init`: start Redis, start the built node in daemon mode, wait for health, then run `go run ./examples init`
+  - `profile init`: create a testagent-derived `profile.toml` scaffold
+  - `module build`: delegate module creation to `go run ./cmd/module` inside the V2 checkout
+  - `spawn`: spawn any VMDocker V2 module with generic runtime tags
+  - `export`: export a running process into a reusable module ID
 
 #### `vmdocker get`
 - Flags:
-  - `--version`: release tag to fetch. If omitted, hype resolves the latest semver tag from the upstream repo.
-  - `--dir`: target clone directory. Default: `./vmdocker`
+  - `--ref`: Git branch, tag, or commit. Default: `main`.
+  - `--dir`: target clone directory. Default: `./vmdockerv2`.
 - Behavior:
-  - Clones `https://github.com/cryptowizard0/vmdocker.git`
-  - Reuses an existing checkout only if it is already a `vmdocker` repo
+  - Clones `https://github.com/cryptowizard0/vmdockerv2.git`
+  - Reuses an existing checkout only if it is already a `vmdockerv2` repo
+  - Fetches the requested ref, refuses to switch when tracked files are dirty, and checks out the target commit detached
   - Builds `./build/hymx-node`
 - Example:
   - `hype vmdocker get`
-  - `hype vmdocker get --version v0.0.1 --dir ./_sandbox/vmdocker`
+  - `hype vmdocker get --ref feature/profile --dir ./_sandbox/vmdockerv2`
 
 #### `vmdocker init`
 - Flags:
-  - `--dir`: VMDocker checkout directory. Default: `./vmdocker`
+  - `--dir`: VMDocker checkout directory. Default: `./vmdockerv2`.
   - `--env-file`: `.env` file used for `examples init`. Required.
 - Behavior:
   - Requires `<dir>/build/hymx-node` to exist
@@ -164,6 +173,68 @@ Claude command usage guide:
   - `VMDOCKER_URL=http://127.0.0.1:8080` is injected automatically
 - Example:
   - `hype vmdocker init --env-file ./local.env`
+
+#### `vmdocker profile init`
+- Flags:
+  - `--dir`: target agent profile directory. Required.
+  - `--from`: full base image name used as `FROM` in `profile.toml`. Required.
+- Behavior:
+  - Creates a minimal profile scaffold derived from `vmdockerv2/testagent`.
+  - Writes `profile.toml`, `bin/.keep`, `skills/soul.md`, and `persona/style.md`.
+  - Refuses to write into a non-empty directory.
+- Example:
+  - `hype vmdocker profile init --dir ./agent --from docker/sandbox-templates:claude-code`
+
+#### `vmdocker module build`
+- Flags:
+  - `--dir`: VMDocker V2 checkout. Default: `./vmdockerv2`.
+  - `--profile`: path to `profile.toml`. Required.
+  - `--agent-bin`: path to the `vmdocker-agent` binary. May also come from `VMDOCKER_AGENT_BIN`.
+  - `--node-url`: node URL. Precedence: flag, `VMDOCKER_URL`, checkout `.env`, then `http://127.0.0.1:8080`.
+  - `--private-key`: module signing private key. Precedence: flag, `VMDOCKER_PRIVATE_KEY`, `HYPE_PRIVATE_KEY`, `PRV_KEY`, then checkout `.env`.
+- Behavior:
+  - Runs `go run ./cmd/module --profile <profile> --agent-bin <agent>` in the V2 checkout.
+  - Streams stdout and stderr from the delegated command.
+  - Does not build or download the agent binary.
+  - Does not parse command output or write module IDs into `.env`.
+- Example:
+  - `hype vmdocker module build --dir ./vmdockerv2 --profile ./agent/profile.toml --agent-bin ./bin/vmdocker-agent --private-key 0x...`
+
+#### `vmdocker spawn`
+- Flags:
+  - `--module-id`, `-m`: module ID. Precedence: flag, `VMDOCKER_MODULE_ID`.
+  - `--scheduler`, `-s`: scheduler address. Precedence: flag, `VMDOCKER_SCHEDULER`.
+  - `--runtime-type`: runtime type. Precedence: flag, `RUNTIME_TYPE`.
+  - `--runtime-backend`: `docker` or `sandbox`. Precedence: flag, `RUNTIME_BACKEND`.
+  - `--env`: repeatable `KEY=VALUE` container environment assignment.
+  - `--node-url`, `-u`: node URL. Precedence: flag, `VMDOCKER_URL`, then `http://127.0.0.1:8080`.
+  - `--private-key`, `-k`: signer private key. Precedence: flag, `VMDOCKER_PRIVATE_KEY`, `HYPE_PRIVATE_KEY`, `PRV_KEY`.
+  - `--json`: print JSON output.
+- Tag mapping:
+  - `--runtime-type claude` -> `Container-Env-RUNTIME_TYPE=claude`
+  - `--env TOKEN=a=b` -> `Container-Env-TOKEN=a=b`
+  - `--runtime-backend docker` -> `Runtime-Backend=docker`
+  - `RUNTIME_TYPE` is reserved for `--runtime-type`; duplicate `--env` keys are rejected.
+- Behavior:
+  - Prints the spawned process ID only; it never writes the pid into `.env`.
+- Example:
+  - `hype vmdocker spawn --module-id <id> --scheduler <address> --runtime-type claude --runtime-backend sandbox --env TOKEN=a=b --private-key 0x...`
+
+#### `vmdocker export`
+- Flags:
+  - `--pid`, `-p`: process ID. Precedence: flag, `VMDOCKER_EXPORT_PID`.
+  - `--node-url`, `-u`: node URL. Precedence: flag, `VMDOCKER_URL`, then `http://127.0.0.1:8080`.
+  - `--private-key`, `-k`: signer private key. Precedence: flag, `VMDOCKER_PRIVATE_KEY`, `HYPE_PRIVATE_KEY`, `PRV_KEY`.
+  - `--json`: print JSON output.
+- Behavior:
+  - Sends the VMDocker `Action=Export` message to the running process.
+  - Strictly decodes the node result and prints `export ok, module id: <id>` on success.
+  - The returned module ID can be passed back to `hype vmdocker spawn --module-id <id>`.
+  - It never writes the module ID into `.env`.
+- Example:
+  - `hype vmdocker export --pid <pid> --private-key 0x...`
+
+> Note: the embedded Web UI's VMDocker Get action still emits the removed `--version` flag and is unsupported by this CLI-only V2 migration.
 
 ### Command: db-import
 - Description: Import a JSONL data file into Redis, calling IDB.Commit for each item.
