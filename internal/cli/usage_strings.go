@@ -25,6 +25,7 @@ const (
 	usage_vmdocker_runtime_backend = "Runtime backend for spawn (docker or sandbox)"
 	usage_vmdocker_env             = "Container environment assignment KEY=VALUE"
 	usage_vmdocker_json            = "Print JSON output"
+	usage_vmdocker_pid             = "Process id"
 
 	usage_vmm_name   = "Name of the vmm"
 	usage_vmm_format = "Module format of the vmm"

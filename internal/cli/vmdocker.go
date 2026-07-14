@@ -19,6 +19,7 @@ func newVmdockerCmd() *cobra.Command {
 	cmd.AddCommand(newVmdockerInitCmd())
 	cmd.AddCommand(newVmdockerModuleCmd())
 	cmd.AddCommand(newVmdockerProfileCmd())
+	cmd.AddCommand(newVmdockerExportCmd())
 	cmd.AddCommand(newVmdockerSpawnCmd())
 	return cmd
 }

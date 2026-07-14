@@ -134,3 +134,95 @@ func TestVmdockerSpawnJSONHydratesEnvWithoutEchoingValues(t *testing.T) {
 		t.Fatalf("secret leaked: %s", out.String())
 	}
 }
+
+func TestDecodeVmdockerExportResult(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+		want    string
+		wantErr string
+	}{
+		{"success", `{"Data":"mod-2","Error":""}`, "mod-2", ""},
+		{"vmm error", `{"Data":"","Error":"export failed"}`, "", "export failed"},
+		{"malformed", `{`, "", "decode export result"},
+		{"empty id", `{"Data":"   ","Error":""}`, "", "empty module id"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := decodeVmdockerExportResult(tc.message)
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+			if tc.wantErr == "" && err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("err = %v", err)
+			}
+		})
+	}
+}
+
+func TestVmdockerExportCommand(t *testing.T) {
+	fake := &fakeVmdockerRuntimeClient{messageResponse: &schema.Response{
+		Id: "response-1", Message: `{"Data":"mod-2","Error":""}`,
+	}}
+	cmd := newVmdockerExportCmdWithClient(func(nodeURL, privateKey string) (vmdockerRuntimeClient, error) {
+		return fake, nil
+	})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--pid", "pid-1", "--private-key", "key"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if fake.messageTarget != "pid-1" {
+		t.Fatalf("target = %q", fake.messageTarget)
+	}
+	if len(fake.messageTags) != 1 || fake.messageTags[0] != (goarSchema.Tag{Name: "Action", Value: "Export"}) {
+		t.Fatalf("tags = %#v", fake.messageTags)
+	}
+	if !strings.Contains(out.String(), "export ok, module id: mod-2") {
+		t.Fatalf("output = %q", out.String())
+	}
+}
+
+func TestVmdockerExportCommandDoesNotPrintSuccessOnNodeError(t *testing.T) {
+	fake := &fakeVmdockerRuntimeClient{messageResponse: &schema.Response{Message: `{"Error":"export failed"}`}}
+	cmd := newVmdockerExportCmdWithClient(func(nodeURL, privateKey string) (vmdockerRuntimeClient, error) {
+		return fake, nil
+	})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--pid", "pid-1", "--private-key", "key"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "export failed") {
+		t.Fatalf("err = %v", err)
+	}
+	if strings.Contains(out.String(), "export ok") {
+		t.Fatalf("unexpected success output: %q", out.String())
+	}
+}
+
+func TestVmdockerExportJSON(t *testing.T) {
+	fake := &fakeVmdockerRuntimeClient{messageResponse: &schema.Response{Id: "response-1", Message: `{"Data":"mod-2"}`}}
+	cmd := newVmdockerExportCmdWithClient(func(nodeURL, privateKey string) (vmdockerRuntimeClient, error) {
+		return fake, nil
+	})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--pid", "pid-1", "--private-key", "do-not-print", "--json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["module_id"] != "mod-2" {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if strings.Contains(out.String(), "do-not-print") {
+		t.Fatalf("private key leaked: %s", out.String())
+	}
+}
