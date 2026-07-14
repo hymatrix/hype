@@ -137,6 +137,8 @@ Claude command usage guide:
 
 ### Command: vmdocker
 - Description: Fetch and use the VMDocker V2 profile workflow from the CLI.
+- Guide:
+  - [`docs/vmdocker-v2-cli-workflow.md`](/Users/webbergao/work/src/HymxWorkspace/hype/docs/vmdocker-v2-cli-workflow.md)
 - Subcommands:
   - `get`: clone a `vmdockerv2` ref and build `build/hymx-node`
   - `init`: start Redis, start the built node in daemon mode, wait for health, then run `go run ./examples init`
