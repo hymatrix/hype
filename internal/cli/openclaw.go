@@ -651,16 +651,7 @@ func newSDK(nodeURL, privateKey string) (*sdk.SDK, error) {
 }
 
 func printOpenclawResult(jsonOut bool, payload map[string]interface{}, fallback string) error {
-	if !jsonOut {
-		fmt.Println(fallback)
-		return nil
-	}
-	b, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(b))
-	return nil
+	return writeRuntimeResult(os.Stdout, jsonOut, payload, fallback)
 }
 
 func extractChatReply(raw string) string {

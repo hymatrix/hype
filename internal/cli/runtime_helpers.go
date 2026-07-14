@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -45,4 +48,17 @@ func validateRuntimeBackend(value string) error {
 	default:
 		return errors.New("runtime-backend must be one of \"docker\" or \"sandbox\"")
 	}
+}
+
+func writeRuntimeResult(out io.Writer, jsonOut bool, payload map[string]interface{}, fallback string) error {
+	if !jsonOut {
+		_, err := fmt.Fprintln(out, fallback)
+		return err
+	}
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(out, string(b))
+	return err
 }

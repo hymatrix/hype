@@ -1,0 +1,167 @@
+package cli
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"regexp"
+	"strings"
+
+	"github.com/hymatrix/hymx/server/schema"
+	goarSchema "github.com/permadao/goar/schema"
+	"github.com/spf13/cobra"
+)
+
+type vmdockerRuntimeClient interface {
+	SpawnAndWait(module, scheduler string, tags []goarSchema.Tag) (*schema.Response, error)
+	SendMessageAndWait(target, data string, tags []goarSchema.Tag) (*schema.Response, error)
+	Close()
+}
+
+type vmdockerRuntimeClientFactory func(nodeURL, privateKey string) (vmdockerRuntimeClient, error)
+
+type vmdockerSpawnOptions struct {
+	nodeURL        string
+	privateKey     string
+	moduleID       string
+	scheduler      string
+	runtimeType    string
+	runtimeBackend string
+	env            []string
+	jsonOut        bool
+}
+
+var vmdockerEnvKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func newVmdockerRuntimeClient(nodeURL, privateKey string) (vmdockerRuntimeClient, error) {
+	return newSDK(nodeURL, privateKey)
+}
+
+func newVmdockerSpawnCmd() *cobra.Command {
+	return newVmdockerSpawnCmdWithClient(newVmdockerRuntimeClient)
+}
+
+func newVmdockerSpawnCmdWithClient(factory vmdockerRuntimeClientFactory) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "spawn",
+		Short: "Spawn a VMDocker process",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			for _, item := range []struct {
+				flag string
+				envs []string
+			}{
+				{flag: "module-id", envs: []string{"VMDOCKER_MODULE_ID"}},
+				{flag: "scheduler", envs: []string{"VMDOCKER_SCHEDULER"}},
+				{flag: "runtime-type", envs: []string{"RUNTIME_TYPE"}},
+				{flag: "runtime-backend", envs: []string{"RUNTIME_BACKEND"}},
+				{flag: "node-url", envs: []string{"VMDOCKER_URL"}},
+				{flag: "private-key", envs: []string{"VMDOCKER_PRIVATE_KEY", "HYPE_PRIVATE_KEY", "PRV_KEY"}},
+			} {
+				if err := hydrateFlagFromEnvs(cmd, item.flag, item.envs...); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			moduleID, _ := cmd.Flags().GetString("module-id")
+			scheduler, _ := cmd.Flags().GetString("scheduler")
+			runtimeType, _ := cmd.Flags().GetString("runtime-type")
+			runtimeBackend, _ := cmd.Flags().GetString("runtime-backend")
+			env, _ := cmd.Flags().GetStringArray("env")
+			nodeURL, _ := cmd.Flags().GetString("node-url")
+			if strings.TrimSpace(nodeURL) == "" {
+				nodeURL = "http://127.0.0.1:8080"
+			}
+			privateKey, _ := cmd.Flags().GetString("private-key")
+			jsonOut, _ := cmd.Flags().GetBool("json")
+			return runVmdockerSpawn(factory, cmd.OutOrStdout(), vmdockerSpawnOptions{
+				nodeURL:        nodeURL,
+				privateKey:     privateKey,
+				moduleID:       moduleID,
+				scheduler:      scheduler,
+				runtimeType:    runtimeType,
+				runtimeBackend: runtimeBackend,
+				env:            env,
+				jsonOut:        jsonOut,
+			})
+		},
+	}
+	cmd.Flags().StringP("module-id", "m", "", usage_vmdocker_module_id)
+	cmd.Flags().StringP("scheduler", "s", "", usage_vmdocker_scheduler)
+	cmd.Flags().String("runtime-type", "", usage_vmdocker_runtime_type)
+	cmd.Flags().String("runtime-backend", "", usage_vmdocker_runtime_backend)
+	cmd.Flags().StringArray("env", nil, usage_vmdocker_env)
+	cmd.Flags().StringP("node-url", "u", "", usage_vmdocker_node_url)
+	cmd.Flags().StringP("private-key", "k", "", usage_vmdocker_private_key)
+	cmd.Flags().Bool("json", false, usage_vmdocker_json)
+	return cmd
+}
+
+func buildVmdockerSpawnTags(runtimeType, backend string, assignments []string) ([]goarSchema.Tag, error) {
+	if err := validateRuntimeBackend(backend); err != nil {
+		return nil, err
+	}
+	tags := make([]goarSchema.Tag, 0, len(assignments)+2)
+	if runtimeType = strings.TrimSpace(runtimeType); runtimeType != "" {
+		tags = append(tags, goarSchema.Tag{Name: containerEnvTagPrefix + "RUNTIME_TYPE", Value: runtimeType})
+	}
+	seen := make(map[string]struct{}, len(assignments))
+	for _, assignment := range assignments {
+		key, value, ok := strings.Cut(assignment, "=")
+		key = strings.TrimSpace(key)
+		if !ok || !vmdockerEnvKeyPattern.MatchString(key) {
+			return nil, fmt.Errorf("invalid environment key in %q", assignment)
+		}
+		if key == "RUNTIME_TYPE" {
+			return nil, errors.New("RUNTIME_TYPE is reserved; use --runtime-type")
+		}
+		if _, exists := seen[key]; exists {
+			return nil, fmt.Errorf("duplicate environment key: %s", key)
+		}
+		seen[key] = struct{}{}
+		tags = append(tags, goarSchema.Tag{Name: containerEnvTagPrefix + key, Value: value})
+	}
+	if backend = strings.TrimSpace(backend); backend != "" {
+		tags = append(tags, goarSchema.Tag{Name: "Runtime-Backend", Value: backend})
+	}
+	return tags, nil
+}
+
+func runVmdockerSpawn(factory vmdockerRuntimeClientFactory, out io.Writer, opts vmdockerSpawnOptions) error {
+	if strings.TrimSpace(opts.moduleID) == "" {
+		return errors.New("module-id is required")
+	}
+	if len(opts.moduleID) > maxIDChars {
+		return fmt.Errorf("module-id is too long (max %d)", maxIDChars)
+	}
+	if strings.TrimSpace(opts.scheduler) == "" {
+		return errors.New("scheduler is required")
+	}
+	if len(opts.scheduler) > maxIDChars {
+		return fmt.Errorf("scheduler is too long (max %d)", maxIDChars)
+	}
+	if strings.TrimSpace(opts.privateKey) == "" {
+		return errors.New("private-key is required")
+	}
+	tags, err := buildVmdockerSpawnTags(opts.runtimeType, opts.runtimeBackend, opts.env)
+	if err != nil {
+		return err
+	}
+	client, err := factory(opts.nodeURL, opts.privateKey)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	res, err := client.SpawnAndWait(opts.moduleID, opts.scheduler, tags)
+	if err != nil {
+		return err
+	}
+	payload := map[string]interface{}{
+		"action":      "spawn",
+		"pid":         res.Id,
+		"response_id": res.Id,
+		"message":     res.Message,
+	}
+	return writeRuntimeResult(out, opts.jsonOut, payload, fmt.Sprintf("spawn ok, pid: %s", res.Id))
+}

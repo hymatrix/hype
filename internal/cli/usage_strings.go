@@ -19,6 +19,13 @@ const (
 	usage_vmdocker_node_url     = "Node URL"
 	usage_vmdocker_private_key  = "Module signing private key"
 
+	usage_vmdocker_module_id       = "VMDocker module id"
+	usage_vmdocker_scheduler       = "Scheduler address"
+	usage_vmdocker_runtime_type    = "Runtime type"
+	usage_vmdocker_runtime_backend = "Runtime backend for spawn (docker or sandbox)"
+	usage_vmdocker_env             = "Container environment assignment KEY=VALUE"
+	usage_vmdocker_json            = "Print JSON output"
+
 	usage_vmm_name   = "Name of the vmm"
 	usage_vmm_format = "Module format of the vmm"
 
