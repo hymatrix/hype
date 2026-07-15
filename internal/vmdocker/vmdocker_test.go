@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -14,8 +16,9 @@ import (
 )
 
 type fakeRunner struct {
-	calls []string
-	run   func(dir string, env []string, name string, args ...string) (string, error)
+	calls     []string
+	run       func(dir string, env []string, name string, args ...string) (string, error)
+	runStream func(dir string, env []string, stdout, stderr io.Writer, name string, args ...string) error
 }
 
 func (f *fakeRunner) Output(_ context.Context, dir string, env []string, name string, args ...string) (string, error) {
@@ -25,6 +28,15 @@ func (f *fakeRunner) Output(_ context.Context, dir string, env []string, name st
 		return "", nil
 	}
 	return f.run(dir, env, name, args...)
+}
+
+func (f *fakeRunner) Run(_ context.Context, dir string, env []string, stdout, stderr io.Writer, name string, args ...string) error {
+	call := strings.TrimSpace(strings.Join(append([]string{name}, args...), " "))
+	f.calls = append(f.calls, call)
+	if f.runStream == nil {
+		return nil
+	}
+	return f.runStream(dir, env, stdout, stderr, name, args...)
 }
 
 type fakeListener struct {
@@ -54,18 +66,19 @@ func (c *fakeConn) SetDeadline(time.Time) error      { return nil }
 func (c *fakeConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *fakeConn) SetWriteDeadline(time.Time) error { return nil }
 
-func TestLatestSemverTagChoosesHighestVersion(t *testing.T) {
-	tag, err := LatestSemverTag(strings.Join([]string{
-		"abc refs/tags/v0.0.1",
-		"def refs/tags/v0.0.2",
-		"ghi refs/tags/v0.1.0-rc.1",
-		"jkl refs/tags/v0.1.0",
-	}, "\n"))
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if tag != "v0.1.0" {
-		t.Fatalf("expected latest tag v0.1.0, got %s", tag)
+func newTestManager(runner *fakeRunner) *Manager {
+	return &Manager{
+		runner:    runner,
+		httpGet:   func(string) (int, error) { return 200, nil },
+		stat:      os.Stat,
+		readDir:   os.ReadDir,
+		readFile:  os.ReadFile,
+		writeFile: os.WriteFile,
+		mkdirAll:  os.MkdirAll,
+		rename:    os.Rename,
+		sleep:     func(time.Duration) {},
+		listen:    net.Listen,
+		glob:      filepath.Glob,
 	}
 }
 
@@ -122,158 +135,73 @@ func TestGetRejectsNonRepoDirectory(t *testing.T) {
 			return "", nil
 		},
 	}
-	manager := &Manager{
-		runner:    runner,
-		httpGet:   func(string) (int, error) { return 200, nil },
-		stat:      os.Stat,
-		readDir:   os.ReadDir,
-		readFile:  os.ReadFile,
-		writeFile: os.WriteFile,
-		mkdirAll:  os.MkdirAll,
-		sleep:     func(time.Duration) {},
-		listen:    net.Listen,
-		glob:      filepath.Glob,
-	}
+	manager := newTestManager(runner)
 
-	if _, _, err := manager.Get(context.Background(), dir, "v0.0.2"); err == nil || !strings.Contains(err.Error(), "not a vmdocker git repository") {
+	if _, _, err := manager.Get(context.Background(), dir, "feature/profile"); err == nil || !strings.Contains(err.Error(), "not a vmdockerv2 git repository") {
 		t.Fatalf("expected repo mismatch error, got %v", err)
 	}
 }
 
-func TestGetSkipsBuildWhenTargetReady(t *testing.T) {
-	dir := t.TempDir()
-	buildDir := filepath.Join(dir, "build")
-	if err := os.MkdirAll(buildDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "cmd"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(buildDir, "hymx-node"), []byte("bin"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
+func TestGetDefaultsToMainAndBuildsV2(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "vmdockerv2")
 	runner := &fakeRunner{
 		run: func(dir string, env []string, name string, args ...string) (string, error) {
-			switch {
-			case name == "git" && strings.Join(args, " ") == "remote get-url origin":
+			switch strings.Join(append([]string{name}, args...), " ") {
+			case "git remote get-url origin":
 				return RepoURL, nil
-			case name == "git" && strings.Join(args, " ") == "describe --tags --exact-match":
-				return "v0.0.2", nil
-			default:
+			case "git rev-parse FETCH_HEAD":
+				return "new-commit", nil
+			case "git rev-parse HEAD":
+				return "old-commit", nil
+			case "git status --short --untracked-files=no":
 				return "", nil
 			}
+			return "", nil
 		},
 	}
-	manager := &Manager{
-		runner:    runner,
-		httpGet:   func(string) (int, error) { return 200, nil },
-		stat:      os.Stat,
-		readDir:   os.ReadDir,
-		readFile:  os.ReadFile,
-		writeFile: os.WriteFile,
-		mkdirAll:  os.MkdirAll,
-		sleep:     func(time.Duration) {},
-		listen:    net.Listen,
-		glob:      filepath.Glob,
-	}
-
-	tag, binaryPath, err := manager.Get(context.Background(), dir, "v0.0.2")
+	manager := newTestManager(runner)
+	ref, binaryPath, err := manager.Get(context.Background(), dir, "")
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatal(err)
 	}
-	if tag != "v0.0.2" {
-		t.Fatalf("expected target tag, got %s", tag)
+	if ref != "main" {
+		t.Fatalf("ref = %q", ref)
 	}
 	if binaryPath != filepath.Join(dir, "build", "hymx-node") {
-		t.Fatalf("unexpected binary path: %s", binaryPath)
+		t.Fatalf("binary = %q", binaryPath)
 	}
-	for _, call := range runner.calls {
-		if strings.Contains(call, "go mod tidy") || strings.Contains(call, "go build") {
-			t.Fatalf("did not expect build pipeline call, got %#v", runner.calls)
+	for _, want := range []string{
+		"git clone https://github.com/cryptowizard0/vmdockerv2.git " + dir,
+		"git fetch --force origin main",
+		"git checkout --detach new-commit",
+		"go mod tidy",
+		"go build -o ./build/hymx-node ./cmd",
+	} {
+		if !containsCall(runner.calls, want) {
+			t.Fatalf("missing %q in %#v", want, runner.calls)
 		}
 	}
 }
 
-func TestGetRunsTidyBeforeBuild(t *testing.T) {
-	dir := t.TempDir()
+func TestGetRefusesDirtyCheckoutBeforeSwitch(t *testing.T) {
 	runner := &fakeRunner{
 		run: func(dir string, env []string, name string, args ...string) (string, error) {
-			switch {
-			case name == "git" && strings.Join(args, " ") == "remote get-url origin":
+			switch strings.Join(append([]string{name}, args...), " ") {
+			case "git remote get-url origin":
 				return RepoURL, nil
-			case name == "git" && strings.Join(args, " ") == "describe --tags --exact-match":
-				return "v0.0.2", nil
-			default:
-				return "", nil
+			case "git rev-parse FETCH_HEAD":
+				return "new-commit", nil
+			case "git rev-parse HEAD":
+				return "old-commit", nil
+			case "git status --short --untracked-files=no":
+				return " M go.mod", nil
 			}
+			return "", nil
 		},
 	}
-	manager := &Manager{
-		runner:   runner,
-		httpGet:  func(string) (int, error) { return 200, nil },
-		stat:     os.Stat,
-		readFile: os.ReadFile,
-		sleep:    func(time.Duration) {},
-		listen:   net.Listen,
-		glob:     filepath.Glob,
-	}
-
-	if _, _, err := manager.Get(context.Background(), dir, "v0.0.2"); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	tidyIndex := callIndex(runner.calls, "go mod tidy")
-	buildIndex := callIndex(runner.calls, "go build -o ./build/hymx-node ./cmd")
-	if tidyIndex == -1 || buildIndex == -1 || tidyIndex > buildIndex {
-		t.Fatalf("expected go mod tidy before go build, got %#v", runner.calls)
-	}
-}
-
-func TestGetRebuildsWhenCheckoutMovesToNewTag(t *testing.T) {
-	dir := t.TempDir()
-	buildDir := filepath.Join(dir, "build")
-	if err := os.MkdirAll(buildDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(buildDir, "hymx-node"), []byte("old-bin"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	runner := &fakeRunner{
-		run: func(dir string, env []string, name string, args ...string) (string, error) {
-			switch {
-			case name == "git" && strings.Join(args, " ") == "remote get-url origin":
-				return RepoURL, nil
-			case name == "git" && strings.Join(args, " ") == "describe --tags --exact-match":
-				return "v0.0.1", nil
-			default:
-				return "", nil
-			}
-		},
-	}
-	manager := &Manager{
-		runner:   runner,
-		httpGet:  func(string) (int, error) { return 200, nil },
-		stat:     os.Stat,
-		readFile: os.ReadFile,
-		sleep:    func(time.Duration) {},
-		listen:   net.Listen,
-		glob:     filepath.Glob,
-	}
-
-	if _, _, err := manager.Get(context.Background(), dir, "v0.0.2"); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	fetchIndex := callIndex(runner.calls, "git fetch --tags --force origin")
-	checkoutIndex := callIndex(runner.calls, "git checkout --detach v0.0.2")
-	tidyIndex := callIndex(runner.calls, "go mod tidy")
-	buildIndex := callIndex(runner.calls, "go build -o ./build/hymx-node ./cmd")
-	if fetchIndex == -1 || checkoutIndex == -1 || tidyIndex == -1 || buildIndex == -1 {
-		t.Fatalf("expected fetch, checkout, and build pipeline calls, got %#v", runner.calls)
-	}
-	if !(fetchIndex < checkoutIndex && checkoutIndex < tidyIndex && tidyIndex < buildIndex) {
-		t.Fatalf("expected fetch -> checkout -> tidy -> build order, got %#v", runner.calls)
+	_, _, err := newTestManager(runner).Get(context.Background(), t.TempDir(), "feature/profile")
+	if err == nil || !strings.Contains(err.Error(), "tracked changes") {
+		t.Fatalf("expected tracked changes error, got %v", err)
 	}
 }
 
@@ -290,7 +218,6 @@ func TestInitRequiresPrivateKeyInEnvFile(t *testing.T) {
 	if err := os.WriteFile(envFile, []byte("OPENCLAW_PROVIDER=zen\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	manager := &Manager{
 		runner:    &fakeRunner{},
 		httpGet:   func(string) (int, error) { return 200, nil },
@@ -323,7 +250,6 @@ func TestInitOrchestratesRedisNodeAndExamples(t *testing.T) {
 	if err := os.WriteFile(envFile, []byte("VMDOCKER_PRIVATE_KEY=0xabc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	listener := &fakeListener{}
 	statuses := []int{503, 200}
 	expectedCmdDir := filepath.Join(dir, "cmd")
@@ -442,7 +368,6 @@ func TestInitAcceptsLowercaseMissingDockerObjectError(t *testing.T) {
 	if err := os.WriteFile(envFile, []byte("VMDOCKER_PRIVATE_KEY=0xabc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	listener := &fakeListener{}
 	runner := &fakeRunner{
 		run: func(dir string, env []string, name string, args ...string) (string, error) {
@@ -512,7 +437,6 @@ func TestInitSkipsManagedRedisWhenPortAlreadyInUse(t *testing.T) {
 	if err := os.WriteFile(envFile, []byte("VMDOCKER_PRIVATE_KEY=0xabc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	runner := &fakeRunner{
 		run: func(dir string, env []string, name string, args ...string) (string, error) {
 			call := strings.Join(append([]string{name}, args...), " ")
@@ -579,7 +503,6 @@ func TestInitRemovesStaleLockAndRestartsNode(t *testing.T) {
 	if err := os.WriteFile(envFile, []byte("VMDOCKER_PRIVATE_KEY=0xabc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	runner := &fakeRunner{
 		run: func(dir string, env []string, name string, args ...string) (string, error) {
 			call := strings.Join(append([]string{name}, args...), " ")
@@ -752,36 +675,135 @@ func callIndex(calls []string, expected string) int {
 	return -1
 }
 
-func TestSyncLocalModulesCopiesCmdModToMod(t *testing.T) {
+func TestSyncLocalModulesMovesGeneratedModToCmdMod(t *testing.T) {
 	dir := t.TempDir()
-	srcDir := filepath.Join(dir, "cmd", "mod")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+	cmdDir := filepath.Join(dir, "cmd")
+	if err := os.MkdirAll(cmdDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, "mod-test.json"), []byte(`{"ok":true}`), 0o644); err != nil {
+	srcPath := filepath.Join(cmdDir, "mod-test.json")
+	if err := os.WriteFile(srcPath, []byte(`{"ok":true}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	manager := &Manager{
-		readDir:   os.ReadDir,
-		readFile:  os.ReadFile,
-		writeFile: os.WriteFile,
-		mkdirAll:  os.MkdirAll,
+		readDir:  os.ReadDir,
+		mkdirAll: os.MkdirAll,
+		rename:   os.Rename,
 	}
 
 	state, err := manager.syncLocalModules(dir)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if !strings.Contains(state, "synced 1 module file") {
+	if !strings.Contains(state, "moved 1 generated module file(s) to cmd/mod") {
 		t.Fatalf("unexpected sync state: %s", state)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "mod", "mod-test.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "cmd", "mod", "mod-test.json"))
 	if err != nil {
-		t.Fatalf("expected copied module file, got %v", err)
+		t.Fatalf("expected moved module file, got %v", err)
 	}
 	if string(data) != `{"ok":true}` {
-		t.Fatalf("unexpected copied data: %s", data)
+		t.Fatalf("unexpected moved data: %s", data)
+	}
+	if _, err := os.Stat(srcPath); !os.IsNotExist(err) {
+		t.Fatalf("expected source module file moved, stat err=%v", err)
+	}
+}
+
+func TestCleanRemovesManagedRuntimeFiles(t *testing.T) {
+	dir := t.TempDir()
+	cmdDir := filepath.Join(dir, "cmd")
+	cmdModDir := filepath.Join(cmdDir, "mod")
+	buildDir := filepath.Join(dir, "build")
+	rootModDir := filepath.Join(dir, "mod")
+	for _, path := range []string{cmdModDir, buildDir, rootModDir} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths := map[string]string{
+		filepath.Join(cmdDir, nodeCmdBin):             "bin-copy",
+		filepath.Join(cmdDir, "hymx-v0.1.0.lock"):     "12345",
+		filepath.Join(cmdDir, "hymx_v0.4.8_test.log"): "log",
+		filepath.Join(cmdModDir, "mod-test.json"):     `{"cache":true}`,
+		filepath.Join(cmdModDir, "keep.txt"):          "keep",
+		filepath.Join(buildDir, "hymx-node"):          "source-bin",
+		filepath.Join(rootModDir, "mod-test.json"):    `{"source":true}`,
+	}
+	for path, data := range paths {
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var killed []int
+	runner := &fakeRunner{run: func(dir string, env []string, name string, args ...string) (string, error) {
+		if got := strings.Join(append([]string{name}, args...), " "); got != "docker rm -f hype-vmdocker-redis" {
+			t.Fatalf("unexpected command %q", got)
+		}
+		return "removed", nil
+	}}
+	manager := &Manager{
+		runner:   runner,
+		readDir:  os.ReadDir,
+		readFile: os.ReadFile,
+		remove:   os.Remove,
+		glob:     filepath.Glob,
+		kill: func(pid int, sig syscall.Signal) error {
+			if sig != syscall.SIGTERM {
+				t.Fatalf("signal = %v, want SIGTERM", sig)
+			}
+			killed = append(killed, pid)
+			return nil
+		},
+	}
+
+	if err := manager.Clean(context.Background(), dir); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(killed, []int{12345}) {
+		t.Fatalf("killed = %#v", killed)
+	}
+	for _, path := range []string{
+		filepath.Join(cmdDir, nodeCmdBin),
+		filepath.Join(cmdDir, "hymx-v0.1.0.lock"),
+		filepath.Join(cmdDir, "hymx_v0.4.8_test.log"),
+		filepath.Join(cmdModDir, "mod-test.json"),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("expected %s removed, stat err=%v", path, err)
+		}
+	}
+	for _, path := range []string{
+		filepath.Join(cmdModDir, "keep.txt"),
+		filepath.Join(buildDir, "hymx-node"),
+		filepath.Join(rootModDir, "mod-test.json"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected %s preserved, got %v", path, err)
+		}
+	}
+	if !containsCall(runner.calls, "docker rm -f hype-vmdocker-redis") {
+		t.Fatalf("expected redis remove, calls=%#v", runner.calls)
+	}
+}
+
+func TestCleanIgnoresMissingManagedRedis(t *testing.T) {
+	dir := t.TempDir()
+	runner := &fakeRunner{run: func(dir string, env []string, name string, args ...string) (string, error) {
+		return "", errors.New("docker [rm -f hype-vmdocker-redis] failed: no such container: hype-vmdocker-redis")
+	}}
+	manager := &Manager{
+		runner:  runner,
+		readDir: os.ReadDir,
+		remove:  os.Remove,
+		glob:    filepath.Glob,
+		kill:    syscall.Kill,
+	}
+
+	if err := manager.Clean(context.Background(), dir); err != nil {
+		t.Fatal(err)
 	}
 }
 

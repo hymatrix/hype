@@ -1,6 +1,6 @@
 {
   "name": "@hymx/hype",
-  "version": "0.0.8",
+  "version": "0.1.0",
   "description": "npm installer for the hype CLI",
   "license": "MPL-2.0",
   "homepage": "https://github.com/hymatrix/hype#readme",

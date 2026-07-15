@@ -6,9 +6,26 @@ const (
 
 	usage_get_package = "Go module path of the VMM package"
 
-	usage_vmdocker_version  = "VMDocker release tag"
+	usage_vmdocker_ref      = "VMDocker Git branch, tag, or reachable commit"
 	usage_vmdocker_dir      = "Target VMDocker directory"
 	usage_vmdocker_env_file = "Path to the .env file used for examples init"
+
+	usage_vmdocker_profile_dir  = "Target agent profile directory"
+	usage_vmdocker_profile_from = "Full base image name"
+
+	usage_vmdocker_checkout_dir = "Target VMDocker V2 checkout"
+	usage_vmdocker_profile      = "Path to profile.toml"
+	usage_vmdocker_agent_bin    = "Path to vmdocker-agent binary"
+	usage_vmdocker_node_url     = "Node URL"
+	usage_vmdocker_private_key  = "Module signing private key"
+
+	usage_vmdocker_module_id       = "VMDocker module id"
+	usage_vmdocker_scheduler       = "Scheduler address"
+	usage_vmdocker_runtime_type    = "Runtime type"
+	usage_vmdocker_runtime_backend = "Runtime backend for spawn (docker or sandbox)"
+	usage_vmdocker_env             = "Container environment assignment KEY=VALUE"
+	usage_vmdocker_json            = "Print JSON output"
+	usage_vmdocker_pid             = "Process id"
 
 	usage_vmm_name   = "Name of the vmm"
 	usage_vmm_format = "Module format of the vmm"

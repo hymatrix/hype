@@ -1,9 +1,10 @@
 package vmdocker
 
 const (
-	RepoURL         = "https://github.com/cryptowizard0/vmdocker.git"
-	repoURLNoSuffix = "https://github.com/cryptowizard0/vmdocker"
-	repoURLSSH      = "git@github.com:cryptowizard0/vmdocker.git"
+	RepoURL         = "https://github.com/cryptowizard0/vmdockerv2.git"
+	repoURLNoSuffix = "https://github.com/cryptowizard0/vmdockerv2"
+	repoURLSSH      = "git@github.com:cryptowizard0/vmdockerv2.git"
+	DefaultRef      = "main"
 
 	RedisContainer = "hype-vmdocker-redis"
 	redisImage     = "redis:latest"
