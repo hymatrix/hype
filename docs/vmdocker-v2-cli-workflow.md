@@ -91,8 +91,12 @@ hype vmdocker module build \
 Hype delegates the build to VMDocker V2:
 
 ```bash
-go run ./cmd/module --profile <profile.toml> --agent-bin <vmdocker-agent>
+cd <vmdockerv2-checkout>/cmd
+go run ./module --profile <profile.toml> --agent-bin <vmdocker-agent>
 ```
+
+After the delegated build succeeds, Hype moves generated `cmd/mod-<itemId>.json` files into `cmd/mod/`.
+This keeps the local node started by `hype vmdocker init` able to load the module from its working directory.
 
 Input precedence:
 
@@ -154,6 +158,29 @@ export ok, module id: <module-id>
 ```
 
 The returned module ID can be passed directly to `hype vmdocker spawn --module-id <module-id>`.
+
+## Maintenance: Clean The Local Runtime
+
+Use this when you need to reset the local runtime state before re-running initialization or local tests.
+
+```bash
+hype vmdocker clean --dir ./vmdockerv2
+```
+
+The command stops the local node process recorded by `cmd/hymx-*.lock`, removes local runtime files, and removes the managed Redis container `hype-vmdocker-redis`.
+
+It removes:
+
+- `cmd/hymx-*.lock`
+- `cmd/hymx_*.log`
+- `cmd/hymx-node`
+- `cmd/mod/*.json`
+
+It does not remove:
+
+- `build/hymx-node`
+- root `mod/*.json`
+- profiles, agents, or the checkout directory
 
 ## Notes
 

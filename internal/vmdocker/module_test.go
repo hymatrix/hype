@@ -44,17 +44,17 @@ func TestBuildModuleResolvesInputsAndStreams(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if gotDir != checkout {
+	if gotDir != filepath.Join(checkout, "cmd") {
 		t.Fatalf("dir = %q", gotDir)
 	}
-	wantArgs := []string{"go", "run", "./cmd/module", "--profile", profile, "--agent-bin", agentBin}
+	wantArgs := []string{"go", "run", "./module", "--profile", profile, "--agent-bin", agentBin}
 	if !slices.Equal(gotArgs, wantArgs) {
 		t.Fatalf("args = %#v", gotArgs)
 	}
 	if !hasEnv(gotEnv, "VMDOCKER_URL=http://flag") || !hasEnv(gotEnv, "VMDOCKER_PRIVATE_KEY=flag-key") {
 		t.Fatalf("env = %#v", gotEnv)
 	}
-	if stdout.String() != "building\n" || stderr.String() != "progress\n" {
+	if !strings.HasPrefix(stdout.String(), "building\nmodules: ") || stderr.String() != "progress\n" {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
@@ -95,8 +95,45 @@ func TestBuildModuleInputPrecedence(t *testing.T) {
 	if !hasEnv(gotEnv, "VMDOCKER_URL=http://flag") || !hasEnv(gotEnv, "VMDOCKER_PRIVATE_KEY=flag-key") {
 		t.Fatalf("env = %#v", gotEnv)
 	}
-	if !slices.Equal(gotArgs, []string{"go", "run", "./cmd/module", "--profile", profile, "--agent-bin", agentBin}) {
+	if !slices.Equal(gotArgs, []string{"go", "run", "./module", "--profile", profile, "--agent-bin", agentBin}) {
 		t.Fatalf("args = %#v", gotArgs)
+	}
+}
+
+func TestBuildModuleMovesGeneratedModuleOutputToNodeStore(t *testing.T) {
+	checkout := t.TempDir()
+	cmdDir := filepath.Join(checkout, "cmd")
+	if err := os.MkdirAll(cmdDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	profile := filepath.Join(t.TempDir(), "profile.toml")
+	agentBin := filepath.Join(t.TempDir(), "vmdocker-agent")
+	if err := os.WriteFile(profile, []byte("[dockerfile]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(agentBin, []byte("bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeRunner{runStream: func(dir string, env []string, stdout, stderr io.Writer, name string, args ...string) error {
+		return os.WriteFile(filepath.Join(dir, "mod-test.json"), []byte(`{"ok":true}`), 0o644)
+	}}
+
+	err := newTestManager(runner).BuildModule(context.Background(), ModuleBuildOptions{
+		CheckoutDir: checkout, ProfilePath: profile, AgentBinPath: agentBin, PrivateKey: "key",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(cmdDir, "mod", "mod-test.json"))
+	if err != nil {
+		t.Fatalf("expected moved module output, got %v", err)
+	}
+	if string(data) != `{"ok":true}` {
+		t.Fatalf("unexpected moved data: %s", data)
+	}
+	if _, err := os.Stat(filepath.Join(cmdDir, "mod-test.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected source module output moved, stat err=%v", err)
 	}
 }
 

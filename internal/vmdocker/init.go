@@ -333,37 +333,57 @@ func (m *Manager) latestNodeLog(dir string) string {
 }
 
 func (m *Manager) syncLocalModules(dir string) (string, error) {
-	srcDir := filepath.Join(dir, "cmd", "mod")
-	entries, err := m.readDir(srcDir)
+	cmdWorkDir := filepath.Join(dir, "cmd")
+	cmdDir := filepath.Join(dir, "cmd", "mod")
+
+	names, err := m.generatedModuleJSONNames(cmdWorkDir)
+	if err != nil {
+		return "", err
+	}
+	if len(names) == 0 {
+		return "no generated module files to move", nil
+	}
+
+	if err := m.mkdirAll(cmdDir, 0o755); err != nil {
+		return "", err
+	}
+	for _, name := range names {
+		srcPath := filepath.Join(cmdWorkDir, name)
+		dstPath := filepath.Join(cmdDir, name)
+		if err := m.renameFile(srcPath, dstPath); err != nil {
+			return "", err
+		}
+	}
+
+	return fmt.Sprintf("moved %d generated module file(s) to cmd/mod", len(names)), nil
+}
+
+func (m *Manager) generatedModuleJSONNames(dir string) ([]string, error) {
+	entries, err := m.readDir(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "no cmd/mod directory to sync", nil
+			return nil, nil
 		}
-		return "", err
+		return nil, err
 	}
 
-	dstDir := filepath.Join(dir, "mod")
-	if err := m.mkdirAll(dstDir, 0o755); err != nil {
-		return "", err
-	}
-
-	synced := 0
+	names := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(name, "mod-") || !strings.HasSuffix(name, ".json") {
 			continue
 		}
-		srcPath := filepath.Join(srcDir, entry.Name())
-		dstPath := filepath.Join(dstDir, entry.Name())
-		data, err := m.readFile(srcPath)
-		if err != nil {
-			return "", err
-		}
-		if err := m.writeFile(dstPath, data, 0o644); err != nil {
-			return "", err
-		}
-		synced++
+		names = append(names, name)
 	}
-	return fmt.Sprintf("synced %d module file(s) from cmd/mod to mod", synced), nil
+	slices.Sort(names)
+	return names, nil
+}
+
+func (m *Manager) renameFile(srcPath, dstPath string) error {
+	if m.rename == nil {
+		return os.Rename(srcPath, dstPath)
+	}
+	return m.rename(srcPath, dstPath)
 }
 
 func (m *Manager) normalizeLocalRedisConfig(dir string) (string, error) {

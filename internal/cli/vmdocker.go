@@ -17,6 +17,7 @@ func newVmdockerCmd() *cobra.Command {
 
 	cmd.AddCommand(newVmdockerGetCmd())
 	cmd.AddCommand(newVmdockerInitCmd())
+	cmd.AddCommand(newVmdockerCleanCmd())
 	cmd.AddCommand(newVmdockerModuleCmd())
 	cmd.AddCommand(newVmdockerProfileCmd())
 	cmd.AddCommand(newVmdockerExportCmd())
@@ -91,6 +92,27 @@ func newVmdockerInitCmd() *cobra.Command {
 
 	cmd.Flags().String("dir", "./vmdockerv2", usage_vmdocker_dir)
 	cmd.Flags().String("env-file", "", usage_vmdocker_env_file)
+	return cmd
+}
+
+func newVmdockerCleanCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "clean",
+		Short: "Stop local VMDocker services and remove generated runtime files",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir, err := cmd.Flags().GetString("dir")
+			if err != nil {
+				return err
+			}
+
+			manager := vmdockerpkg.NewManager()
+			manager.SetOutput(cmd.OutOrStdout())
+			ctx := commandContext(cmd)
+			return manager.Clean(ctx, dir)
+		},
+	}
+
+	cmd.Flags().String("dir", "./vmdockerv2", usage_vmdocker_dir)
 	return cmd
 }
 

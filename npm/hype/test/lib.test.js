@@ -11,14 +11,14 @@ test("maps supported platforms to release asset names", () => {
 });
 
 test("derives GitHub release tags from npm package versions", () => {
-  assert.equal(getReleaseTag("0.0.8"), "v0.0.8");
-  assert.equal(getReleaseTag("v0.0.8"), "v0.0.8");
+  assert.equal(getReleaseTag("0.1.0"), "v0.1.0");
+  assert.equal(getReleaseTag("v0.1.0"), "v0.1.0");
 });
 
 test("builds release download URLs from package versions", () => {
   assert.equal(
-    getAssetUrl("0.0.8", "checksums.txt"),
-    "https://github.com/hymatrix/hype/releases/download/v0.0.8/checksums.txt"
+    getAssetUrl("0.1.0", "checksums.txt"),
+    "https://github.com/hymatrix/hype/releases/download/v0.1.0/checksums.txt"
   );
 });
 

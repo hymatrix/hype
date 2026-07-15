@@ -51,10 +51,19 @@ func (m *Manager) BuildModule(ctx context.Context, opts ModuleBuildOptions) erro
 	if stderr == nil {
 		stderr = io.Discard
 	}
-	return m.runner.Run(ctx, checkout, []string{
+	cmdDir := filepath.Join(checkout, "cmd")
+	if err := m.runner.Run(ctx, cmdDir, []string{
 		"VMDOCKER_URL=" + nodeURL,
 		"VMDOCKER_PRIVATE_KEY=" + privateKey,
-	}, stdout, stderr, "go", "run", "./cmd/module", "--profile", profile, "--agent-bin", agentBin)
+	}, stdout, stderr, "go", "run", "./module", "--profile", profile, "--agent-bin", agentBin); err != nil {
+		return err
+	}
+	moduleSyncState, err := m.syncLocalModules(checkout)
+	if err != nil {
+		return err
+	}
+	m.printf("modules: %s\n", moduleSyncState)
+	return nil
 }
 
 func (m *Manager) readBuildEnv(checkout string) (map[string]string, error) {

@@ -24,4 +24,18 @@ func TestVmdockerV2Defaults(t *testing.T) {
 	if initDir != "./vmdockerv2" {
 		t.Fatalf("init dir = %q", initDir)
 	}
+	if initCmd.Flags().Lookup("env-file") == nil {
+		t.Fatal("--env-file must be defined")
+	}
+	if initCmd.Flags().Lookup("private-key") != nil {
+		t.Fatal("--private-key must not be defined for init")
+	}
+	cleanCmd, _, err := root.Find([]string{"vmdocker", "clean"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanDir, _ := cleanCmd.Flags().GetString("dir")
+	if cleanDir != "./vmdockerv2" {
+		t.Fatalf("clean dir = %q", cleanDir)
+	}
 }

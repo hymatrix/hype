@@ -74,7 +74,13 @@ func newVmdockerSpawnCmdWithClient(factory vmdockerRuntimeClientFactory) *cobra.
 					return err
 				}
 			}
-			return nil
+			return replPromptRequiredStringFlags(cmd, []replFlagPrompt{
+				{Name: "module-id", Prompt: "module-id (-m/--module-id) " + usage_vmdocker_module_id + ": "},
+				{Name: "scheduler", Prompt: "scheduler (-s/--scheduler) " + usage_vmdocker_scheduler + ": "},
+				{Name: "private-key", Prompt: "private-key (-k/--private-key) " + usage_vmdocker_private_key + ": "},
+				{Name: "runtime-type", Prompt: "runtime-type (--runtime-type) " + usage_vmdocker_runtime_type + ": ", Optional: true},
+				{Name: "runtime-backend", Prompt: "runtime-backend (--runtime-backend) " + usage_vmdocker_runtime_backend + ": ", Optional: true},
+			})
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			moduleID, _ := cmd.Flags().GetString("module-id")
@@ -158,7 +164,10 @@ func newVmdockerExportCmdWithClient(factory vmdockerRuntimeClientFactory) *cobra
 					return err
 				}
 			}
-			return nil
+			return replPromptRequiredStringFlags(cmd, []replFlagPrompt{
+				{Name: "pid", Prompt: "pid (-p/--pid) " + usage_vmdocker_pid + ": "},
+				{Name: "private-key", Prompt: "private-key (-k/--private-key) " + usage_vmdocker_private_key + ": "},
+			})
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pid, _ := cmd.Flags().GetString("pid")

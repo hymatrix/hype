@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -74,6 +75,7 @@ func newTestManager(runner *fakeRunner) *Manager {
 		readFile:  os.ReadFile,
 		writeFile: os.WriteFile,
 		mkdirAll:  os.MkdirAll,
+		rename:    os.Rename,
 		sleep:     func(time.Duration) {},
 		listen:    net.Listen,
 		glob:      filepath.Glob,
@@ -216,7 +218,6 @@ func TestInitRequiresPrivateKeyInEnvFile(t *testing.T) {
 	if err := os.WriteFile(envFile, []byte("OPENCLAW_PROVIDER=zen\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	manager := &Manager{
 		runner:    &fakeRunner{},
 		httpGet:   func(string) (int, error) { return 200, nil },
@@ -249,7 +250,6 @@ func TestInitOrchestratesRedisNodeAndExamples(t *testing.T) {
 	if err := os.WriteFile(envFile, []byte("VMDOCKER_PRIVATE_KEY=0xabc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	listener := &fakeListener{}
 	statuses := []int{503, 200}
 	expectedCmdDir := filepath.Join(dir, "cmd")
@@ -368,7 +368,6 @@ func TestInitAcceptsLowercaseMissingDockerObjectError(t *testing.T) {
 	if err := os.WriteFile(envFile, []byte("VMDOCKER_PRIVATE_KEY=0xabc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	listener := &fakeListener{}
 	runner := &fakeRunner{
 		run: func(dir string, env []string, name string, args ...string) (string, error) {
@@ -438,7 +437,6 @@ func TestInitSkipsManagedRedisWhenPortAlreadyInUse(t *testing.T) {
 	if err := os.WriteFile(envFile, []byte("VMDOCKER_PRIVATE_KEY=0xabc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	runner := &fakeRunner{
 		run: func(dir string, env []string, name string, args ...string) (string, error) {
 			call := strings.Join(append([]string{name}, args...), " ")
@@ -505,7 +503,6 @@ func TestInitRemovesStaleLockAndRestartsNode(t *testing.T) {
 	if err := os.WriteFile(envFile, []byte("VMDOCKER_PRIVATE_KEY=0xabc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	runner := &fakeRunner{
 		run: func(dir string, env []string, name string, args ...string) (string, error) {
 			call := strings.Join(append([]string{name}, args...), " ")
@@ -678,36 +675,135 @@ func callIndex(calls []string, expected string) int {
 	return -1
 }
 
-func TestSyncLocalModulesCopiesCmdModToMod(t *testing.T) {
+func TestSyncLocalModulesMovesGeneratedModToCmdMod(t *testing.T) {
 	dir := t.TempDir()
-	srcDir := filepath.Join(dir, "cmd", "mod")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+	cmdDir := filepath.Join(dir, "cmd")
+	if err := os.MkdirAll(cmdDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, "mod-test.json"), []byte(`{"ok":true}`), 0o644); err != nil {
+	srcPath := filepath.Join(cmdDir, "mod-test.json")
+	if err := os.WriteFile(srcPath, []byte(`{"ok":true}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	manager := &Manager{
-		readDir:   os.ReadDir,
-		readFile:  os.ReadFile,
-		writeFile: os.WriteFile,
-		mkdirAll:  os.MkdirAll,
+		readDir:  os.ReadDir,
+		mkdirAll: os.MkdirAll,
+		rename:   os.Rename,
 	}
 
 	state, err := manager.syncLocalModules(dir)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if !strings.Contains(state, "synced 1 module file") {
+	if !strings.Contains(state, "moved 1 generated module file(s) to cmd/mod") {
 		t.Fatalf("unexpected sync state: %s", state)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "mod", "mod-test.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "cmd", "mod", "mod-test.json"))
 	if err != nil {
-		t.Fatalf("expected copied module file, got %v", err)
+		t.Fatalf("expected moved module file, got %v", err)
 	}
 	if string(data) != `{"ok":true}` {
-		t.Fatalf("unexpected copied data: %s", data)
+		t.Fatalf("unexpected moved data: %s", data)
+	}
+	if _, err := os.Stat(srcPath); !os.IsNotExist(err) {
+		t.Fatalf("expected source module file moved, stat err=%v", err)
+	}
+}
+
+func TestCleanRemovesManagedRuntimeFiles(t *testing.T) {
+	dir := t.TempDir()
+	cmdDir := filepath.Join(dir, "cmd")
+	cmdModDir := filepath.Join(cmdDir, "mod")
+	buildDir := filepath.Join(dir, "build")
+	rootModDir := filepath.Join(dir, "mod")
+	for _, path := range []string{cmdModDir, buildDir, rootModDir} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths := map[string]string{
+		filepath.Join(cmdDir, nodeCmdBin):             "bin-copy",
+		filepath.Join(cmdDir, "hymx-v0.1.0.lock"):     "12345",
+		filepath.Join(cmdDir, "hymx_v0.4.8_test.log"): "log",
+		filepath.Join(cmdModDir, "mod-test.json"):     `{"cache":true}`,
+		filepath.Join(cmdModDir, "keep.txt"):          "keep",
+		filepath.Join(buildDir, "hymx-node"):          "source-bin",
+		filepath.Join(rootModDir, "mod-test.json"):    `{"source":true}`,
+	}
+	for path, data := range paths {
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var killed []int
+	runner := &fakeRunner{run: func(dir string, env []string, name string, args ...string) (string, error) {
+		if got := strings.Join(append([]string{name}, args...), " "); got != "docker rm -f hype-vmdocker-redis" {
+			t.Fatalf("unexpected command %q", got)
+		}
+		return "removed", nil
+	}}
+	manager := &Manager{
+		runner:   runner,
+		readDir:  os.ReadDir,
+		readFile: os.ReadFile,
+		remove:   os.Remove,
+		glob:     filepath.Glob,
+		kill: func(pid int, sig syscall.Signal) error {
+			if sig != syscall.SIGTERM {
+				t.Fatalf("signal = %v, want SIGTERM", sig)
+			}
+			killed = append(killed, pid)
+			return nil
+		},
+	}
+
+	if err := manager.Clean(context.Background(), dir); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(killed, []int{12345}) {
+		t.Fatalf("killed = %#v", killed)
+	}
+	for _, path := range []string{
+		filepath.Join(cmdDir, nodeCmdBin),
+		filepath.Join(cmdDir, "hymx-v0.1.0.lock"),
+		filepath.Join(cmdDir, "hymx_v0.4.8_test.log"),
+		filepath.Join(cmdModDir, "mod-test.json"),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("expected %s removed, stat err=%v", path, err)
+		}
+	}
+	for _, path := range []string{
+		filepath.Join(cmdModDir, "keep.txt"),
+		filepath.Join(buildDir, "hymx-node"),
+		filepath.Join(rootModDir, "mod-test.json"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected %s preserved, got %v", path, err)
+		}
+	}
+	if !containsCall(runner.calls, "docker rm -f hype-vmdocker-redis") {
+		t.Fatalf("expected redis remove, calls=%#v", runner.calls)
+	}
+}
+
+func TestCleanIgnoresMissingManagedRedis(t *testing.T) {
+	dir := t.TempDir()
+	runner := &fakeRunner{run: func(dir string, env []string, name string, args ...string) (string, error) {
+		return "", errors.New("docker [rm -f hype-vmdocker-redis] failed: no such container: hype-vmdocker-redis")
+	}}
+	manager := &Manager{
+		runner:  runner,
+		readDir: os.ReadDir,
+		remove:  os.Remove,
+		glob:    filepath.Glob,
+		kill:    syscall.Kill,
+	}
+
+	if err := manager.Clean(context.Background(), dir); err != nil {
+		t.Fatal(err)
 	}
 }
 

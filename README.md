@@ -23,7 +23,7 @@ Claude command usage guide:
   - `go install ./cmd/hype`
   - or use `make install`
 - From GitHub with version:
-  - `go install github.com/hymatrix/hype/cmd/hype@v0.0.8`
+  - `go install github.com/hymatrix/hype/cmd/hype@v0.1.0`
   or
   - `go install github.com/hymatrix/hype/cmd/hype@latest`
 - From npm:
@@ -143,7 +143,7 @@ Claude command usage guide:
   - `get`: clone a `vmdockerv2` ref and build `build/hymx-node`
   - `init`: start Redis, start the built node in daemon mode, wait for health, then run `go run ./examples init`
   - `profile init`: create a testagent-derived `profile.toml` scaffold
-  - `module build`: delegate module creation to `go run ./cmd/module` inside the V2 checkout
+  - `module build`: delegate module creation to `go run ./module` inside the V2 checkout `cmd/` directory
   - `spawn`: spawn any VMDocker V2 module with generic runtime tags
   - `export`: export a running process into a reusable module ID
 
@@ -176,6 +176,17 @@ Claude command usage guide:
 - Example:
   - `hype vmdocker init --env-file ./local.env`
 
+#### `vmdocker clean`
+- Flags:
+  - `--dir`: VMDocker V2 checkout. Default: `./vmdockerv2`.
+- Behavior:
+  - Sends `SIGTERM` to the local node process recorded by `cmd/hymx-*.lock`.
+  - Removes `cmd/hymx-*.lock`, `cmd/hymx_*.log`, `cmd/hymx-node`, and `cmd/mod/*.json`.
+  - Removes the managed Redis container `hype-vmdocker-redis` if it exists.
+  - Does not remove `build/hymx-node`, root `mod/*.json`, profiles, agents, or the checkout directory.
+- Example:
+  - `hype vmdocker clean --dir ./vmdockerv2`
+
 #### `vmdocker profile init`
 - Flags:
   - `--dir`: target agent profile directory. Required.
@@ -195,8 +206,9 @@ Claude command usage guide:
   - `--node-url`: node URL. Precedence: flag, `VMDOCKER_URL`, checkout `.env`, then `http://127.0.0.1:8080`.
   - `--private-key`: module signing private key. Precedence: flag, `VMDOCKER_PRIVATE_KEY`, `HYPE_PRIVATE_KEY`, `PRV_KEY`, then checkout `.env`.
 - Behavior:
-  - Runs `go run ./cmd/module --profile <profile> --agent-bin <agent>` in the V2 checkout.
+  - Runs `go run ./module --profile <profile> --agent-bin <agent>` in the V2 checkout `cmd/` directory.
   - Streams stdout and stderr from the delegated command.
+  - Moves generated `cmd/mod-<itemId>.json` files into `cmd/mod/` so the locally started V2 node can load them from its working directory.
   - Does not build or download the agent binary.
   - Does not parse command output or write module IDs into `.env`.
 - Example:

@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -98,6 +100,45 @@ func TestVmdockerSpawnCommand(t *testing.T) {
 	}
 }
 
+func TestVmdockerSpawnReplPromptsRequiredFlags(t *testing.T) {
+	cmd := newVmdockerSpawnCmdWithClient(func(nodeURL, privateKey string) (vmdockerRuntimeClient, error) {
+		t.Fatalf("unexpected client creation")
+		return nil, nil
+	})
+	var out bytes.Buffer
+	cmd.SetContext(withRepl(context.Background(), bufio.NewReader(strings.NewReader("mod-1\nscheduler-1\nkey\nclaude\ndocker\n")), &out))
+	if err := cmd.PreRunE(cmd, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, want := range map[string]string{
+		"module-id":       "mod-1",
+		"scheduler":       "scheduler-1",
+		"private-key":     "key",
+		"runtime-type":    "claude",
+		"runtime-backend": "docker",
+	} {
+		got, err := cmd.Flags().GetString(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Fatalf("%s = %q, want %q", name, got, want)
+		}
+	}
+	for _, want := range []string{
+		"module-id (-m/--module-id)",
+		"scheduler (-s/--scheduler)",
+		"private-key (-k/--private-key)",
+		"runtime-type (--runtime-type)",
+		"runtime-backend (--runtime-backend)",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("prompt output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
 func TestVmdockerSpawnJSONHydratesEnvWithoutEchoingValues(t *testing.T) {
 	t.Setenv("VMDOCKER_MODULE_ID", "mod-env")
 	t.Setenv("VMDOCKER_SCHEDULER", "scheduler-env")
@@ -184,6 +225,32 @@ func TestVmdockerExportCommand(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "export ok, module id: mod-2") {
 		t.Fatalf("output = %q", out.String())
+	}
+}
+
+func TestVmdockerExportReplPromptsRequiredFlags(t *testing.T) {
+	cmd := newVmdockerExportCmdWithClient(func(nodeURL, privateKey string) (vmdockerRuntimeClient, error) {
+		t.Fatalf("unexpected client creation")
+		return nil, nil
+	})
+	var out bytes.Buffer
+	cmd.SetContext(withRepl(context.Background(), bufio.NewReader(strings.NewReader("pid-1\nkey\n")), &out))
+	if err := cmd.PreRunE(cmd, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	pid, _ := cmd.Flags().GetString("pid")
+	privateKey, _ := cmd.Flags().GetString("private-key")
+	if pid != "pid-1" || privateKey != "key" {
+		t.Fatalf("pid=%q key=%q", pid, privateKey)
+	}
+	for _, want := range []string{
+		"pid (-p/--pid)",
+		"private-key (-k/--private-key)",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("prompt output missing %q:\n%s", want, out.String())
+		}
 	}
 }
 
