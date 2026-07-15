@@ -21,6 +21,7 @@ type Manager struct {
 	chmod     func(string, os.FileMode) error
 	mkdirAll  func(string, os.FileMode) error
 	remove    func(string) error
+	removeAll func(string) error
 	rename    func(string, string) error
 	sleep     func(time.Duration)
 	listen    func(network, address string) (net.Listener, error)
@@ -42,6 +43,7 @@ func NewManager() *Manager {
 		chmod:     os.Chmod,
 		mkdirAll:  os.MkdirAll,
 		remove:    os.Remove,
+		removeAll: os.RemoveAll,
 		rename:    os.Rename,
 		sleep:     time.Sleep,
 		listen:    net.Listen,

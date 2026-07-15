@@ -54,11 +54,13 @@ func (m *Manager) InitProfile(dir, baseImage string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	targetExisted := false
 	info, err := m.stat(absDir)
 	switch {
 	case err == nil && !info.IsDir():
 		return "", fmt.Errorf("profile target is not a directory: %s", absDir)
 	case err == nil:
+		targetExisted = true
 		entries, err := m.readDir(absDir)
 		if err != nil {
 			return "", err
@@ -76,14 +78,45 @@ func (m *Manager) InitProfile(dir, baseImage string) (string, error) {
 		"skills/soul.md":   "MY-SOUL\n",
 		"persona/style.md": "terse, precise\n",
 	}
+	written := make([]string, 0, len(files))
 	for rel, content := range files {
 		path := filepath.Join(absDir, filepath.FromSlash(rel))
 		if err := m.mkdirAll(filepath.Dir(path), 0o755); err != nil {
+			m.cleanupProfileInitFailure(absDir, written, targetExisted)
 			return "", err
 		}
 		if err := m.writeFile(path, []byte(content), 0o644); err != nil {
+			m.cleanupProfileInitFailure(absDir, written, targetExisted)
 			return "", err
 		}
+		written = append(written, path)
 	}
 	return absDir, nil
+}
+
+func (m *Manager) cleanupProfileInitFailure(absDir string, written []string, targetExisted bool) {
+	if !targetExisted {
+		_ = m.removeAllPath(absDir)
+		return
+	}
+	for i := len(written) - 1; i >= 0; i-- {
+		_ = m.removePath(written[i])
+	}
+	for _, rel := range []string{"bin", "skills", "persona"} {
+		_ = m.removePath(filepath.Join(absDir, rel))
+	}
+}
+
+func (m *Manager) removePath(path string) error {
+	if m.remove == nil {
+		return os.Remove(path)
+	}
+	return m.remove(path)
+}
+
+func (m *Manager) removeAllPath(path string) error {
+	if m.removeAll == nil {
+		return os.RemoveAll(path)
+	}
+	return m.removeAll(path)
 }

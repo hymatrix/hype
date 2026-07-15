@@ -19,28 +19,22 @@ type ModuleBuildOptions struct {
 }
 
 func (m *Manager) BuildModule(ctx context.Context, opts ModuleBuildOptions) error {
-	checkout, err := filepath.Abs(opts.CheckoutDir)
+	resolved, err := m.ResolveModuleBuildOptions(opts)
 	if err != nil {
 		return err
 	}
+	checkout := resolved.CheckoutDir
 	if info, err := m.stat(checkout); err != nil || !info.IsDir() {
 		return fmt.Errorf("vmdockerv2 checkout not found: %s", checkout)
 	}
-	envValues, err := m.readBuildEnv(checkout)
-	if err != nil {
-		return err
-	}
-	agentBin := firstValue(opts.AgentBinPath, os.Getenv("VMDOCKER_AGENT_BIN"), envValues["VMDOCKER_AGENT_BIN"])
-	nodeURL := firstValue(opts.NodeURL, os.Getenv("VMDOCKER_URL"), envValues["VMDOCKER_URL"], "http://127.0.0.1:8080")
-	privateKey := firstValue(opts.PrivateKey, os.Getenv("VMDOCKER_PRIVATE_KEY"), os.Getenv("HYPE_PRIVATE_KEY"), os.Getenv("PRV_KEY"), envValues["VMDOCKER_PRIVATE_KEY"])
-	if privateKey == "" {
+	if resolved.PrivateKey == "" {
 		return errors.New("private-key is required")
 	}
-	profile, err := absoluteRegularFile(opts.ProfilePath, m.stat, "profile")
+	profile, err := absoluteRegularFile(resolved.ProfilePath, m.stat, "profile")
 	if err != nil {
 		return err
 	}
-	agentBin, err = absoluteRegularFile(agentBin, m.stat, "agent-bin")
+	agentBin, err := absoluteRegularFile(resolved.AgentBinPath, m.stat, "agent-bin")
 	if err != nil {
 		return err
 	}
@@ -53,8 +47,8 @@ func (m *Manager) BuildModule(ctx context.Context, opts ModuleBuildOptions) erro
 	}
 	cmdDir := filepath.Join(checkout, "cmd")
 	if err := m.runner.Run(ctx, cmdDir, []string{
-		"VMDOCKER_URL=" + nodeURL,
-		"VMDOCKER_PRIVATE_KEY=" + privateKey,
+		"VMDOCKER_URL=" + resolved.NodeURL,
+		"VMDOCKER_PRIVATE_KEY=" + resolved.PrivateKey,
 	}, stdout, stderr, "go", "run", "./module", "--profile", profile, "--agent-bin", agentBin); err != nil {
 		return err
 	}
@@ -64,6 +58,24 @@ func (m *Manager) BuildModule(ctx context.Context, opts ModuleBuildOptions) erro
 	}
 	m.printf("modules: %s\n", moduleSyncState)
 	return nil
+}
+
+func (m *Manager) ResolveModuleBuildOptions(opts ModuleBuildOptions) (ModuleBuildOptions, error) {
+	checkout, err := filepath.Abs(opts.CheckoutDir)
+	if err != nil {
+		return ModuleBuildOptions{}, err
+	}
+	envValues, err := m.readBuildEnv(checkout)
+	if err != nil {
+		return ModuleBuildOptions{}, err
+	}
+	return ModuleBuildOptions{
+		CheckoutDir:  checkout,
+		ProfilePath:  opts.ProfilePath,
+		AgentBinPath: firstValue(opts.AgentBinPath, os.Getenv("VMDOCKER_AGENT_BIN"), envValues["VMDOCKER_AGENT_BIN"]),
+		NodeURL:      firstValue(opts.NodeURL, os.Getenv("VMDOCKER_URL"), envValues["VMDOCKER_URL"], "http://127.0.0.1:8080"),
+		PrivateKey:   firstValue(opts.PrivateKey, os.Getenv("VMDOCKER_PRIVATE_KEY"), os.Getenv("HYPE_PRIVATE_KEY"), os.Getenv("PRV_KEY"), envValues["VMDOCKER_PRIVATE_KEY"]),
+	}, nil
 }
 
 func (m *Manager) readBuildEnv(checkout string) (map[string]string, error) {

@@ -3,7 +3,7 @@
 
 Claude command usage guide:
 
-- [`tools/claude/README.md`](/Users/webbergao/work/src/HymxWorkspace/hype/tools/claude/README.md)
+- [`tools/claude/README.md`](tools/claude/README.md)
 
 ## Build
 - Use `make`:
@@ -138,7 +138,7 @@ Claude command usage guide:
 ### Command: vmdocker
 - Description: Fetch and use the VMDocker V2 profile workflow from the CLI.
 - Guide:
-  - [`docs/vmdocker-v2-cli-workflow.md`](/Users/webbergao/work/src/HymxWorkspace/hype/docs/vmdocker-v2-cli-workflow.md)
+  - [`docs/vmdocker-v2-cli-workflow.md`](docs/vmdocker-v2-cli-workflow.md)
 - Subcommands:
   - `get`: clone a `vmdockerv2` ref and build `build/hymx-node`
   - `init`: start Redis, start the built node in daemon mode, wait for health, then run `go run ./examples init`
@@ -149,10 +149,11 @@ Claude command usage guide:
 
 #### `vmdocker get`
 - Flags:
-  - `--ref`: Git branch, tag, or commit. Default: `main`.
+  - `--ref`: Git branch, tag, or reachable commit. Default: `main`.
   - `--dir`: target clone directory. Default: `./vmdockerv2`.
 - Behavior:
   - Clones `https://github.com/cryptowizard0/vmdockerv2.git`
+  - Commit SHA refs must be reachable from an advertised remote ref; unreachable/dangling commits may be rejected by GitHub.
   - Reuses an existing checkout only if it is already a `vmdockerv2` repo
   - Fetches the requested ref, refuses to switch when tracked files are dirty, and checks out the target commit detached
   - Builds `./build/hymx-node`
@@ -325,7 +326,7 @@ Example spawn with explicit sandbox backend:
 ### Command: claude
 - Description: Execute Claude runtime workflows through hymx SDK.
 - Detailed usage:
-  - [`tools/claude/README.md`](/Users/webbergao/work/src/HymxWorkspace/hype/tools/claude/README.md)
+  - [`tools/claude/README.md`](tools/claude/README.md)
 - Subcommands:
   - `spawn`: Create a new Claude process using module + scheduler + Claude env tags.
   - `chat`: Send a chat message (`Chat`).
@@ -367,7 +368,7 @@ Example Claude exec:
 ## Hype Web UI
 - Description: Local Web UI embedded in the `hype` binary for `hype openclaw`, `hype claude`, and `hype vmdocker` commands.
 - Claude usage guide:
-  - [`tools/claude/README.md`](/Users/webbergao/work/src/HymxWorkspace/hype/tools/claude/README.md)
+  - [`tools/claude/README.md`](tools/claude/README.md)
 - Features:
   - Local-only API server (`127.0.0.1:7788`).
   - Start with `hype ui`.

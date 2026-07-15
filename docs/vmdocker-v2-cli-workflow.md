@@ -33,13 +33,13 @@ Defaults:
 - directory: `./vmdockerv2`
 - ref: `main`
 
-Use a branch, tag, or commit with `--ref`:
+Use a branch, tag, or reachable commit with `--ref`:
 
 ```bash
 hype vmdocker get --dir ./vmdockerv2 --ref main
 ```
 
-If the checkout already exists, Hype verifies that it is a VMDocker V2 repo, fetches the requested ref, refuses to switch when tracked files are dirty, and rebuilds `build/hymx-node` when needed.
+If the checkout already exists, Hype verifies that it is a VMDocker V2 repo, fetches the requested ref, refuses to switch when tracked files are dirty, and rebuilds `build/hymx-node` when needed. Commit SHA refs must be reachable from an advertised remote ref; unreachable/dangling commits may be rejected by GitHub.
 
 ## 2. Initialize The Local Node
 

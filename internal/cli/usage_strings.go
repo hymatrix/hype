@@ -6,7 +6,7 @@ const (
 
 	usage_get_package = "Go module path of the VMM package"
 
-	usage_vmdocker_ref      = "VMDocker Git branch, tag, or commit"
+	usage_vmdocker_ref      = "VMDocker Git branch, tag, or reachable commit"
 	usage_vmdocker_dir      = "Target VMDocker directory"
 	usage_vmdocker_env_file = "Path to the .env file used for examples init"
 

@@ -1,11 +1,6 @@
 package cli
 
 import (
-	"errors"
-	"os"
-	"path/filepath"
-	"strings"
-
 	vmdockerpkg "github.com/hymatrix/hype/internal/vmdocker"
 	"github.com/spf13/cobra"
 )
@@ -62,49 +57,46 @@ func newVmdockerModuleBuildCmd() *cobra.Command {
 }
 
 func hydrateVmdockerModuleBuildFlags(cmd *cobra.Command) error {
-	for _, item := range []struct {
-		flag string
-		envs []string
-	}{
-		{flag: "agent-bin", envs: []string{"VMDOCKER_AGENT_BIN"}},
-		{flag: "node-url", envs: []string{"VMDOCKER_URL"}},
-		{flag: "private-key", envs: []string{"VMDOCKER_PRIVATE_KEY", "HYPE_PRIVATE_KEY", "PRV_KEY"}},
-	} {
-		if err := hydrateFlagFromEnvs(cmd, item.flag, item.envs...); err != nil {
-			return err
-		}
-	}
-
 	dir, err := cmd.Flags().GetString("dir")
 	if err != nil {
 		return err
 	}
-	envFile := strings.TrimSpace(os.Getenv("VMDOCKER_ENV_FILE"))
-	if envFile == "" {
-		envFile = filepath.Join(dir, ".env")
-	} else if !filepath.IsAbs(envFile) {
-		envFile = filepath.Join(dir, envFile)
-	}
-	values, err := vmdockerpkg.ParseEnvFile(envFile, os.ReadFile)
+	profile, err := cmd.Flags().GetString("profile")
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
 		return err
 	}
-	for flag, envKey := range map[string]string{
-		"agent-bin":   "VMDOCKER_AGENT_BIN",
-		"node-url":    "VMDOCKER_URL",
-		"private-key": "VMDOCKER_PRIVATE_KEY",
+	agentBin, err := cmd.Flags().GetString("agent-bin")
+	if err != nil {
+		return err
+	}
+	nodeURL, err := cmd.Flags().GetString("node-url")
+	if err != nil {
+		return err
+	}
+	privateKey, err := cmd.Flags().GetString("private-key")
+	if err != nil {
+		return err
+	}
+
+	resolved, err := vmdockerpkg.NewManager().ResolveModuleBuildOptions(vmdockerpkg.ModuleBuildOptions{
+		CheckoutDir:  dir,
+		ProfilePath:  profile,
+		AgentBinPath: agentBin,
+		NodeURL:      nodeURL,
+		PrivateKey:   privateKey,
+	})
+	if err != nil {
+		return err
+	}
+	for flag, value := range map[string]string{
+		"agent-bin":   resolved.AgentBinPath,
+		"node-url":    resolved.NodeURL,
+		"private-key": resolved.PrivateKey,
 	} {
-		current, err := cmd.Flags().GetString(flag)
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(current) != "" || strings.TrimSpace(values[envKey]) == "" {
+		if value == "" {
 			continue
 		}
-		if err := cmd.Flags().Set(flag, values[envKey]); err != nil {
+		if err := cmd.Flags().Set(flag, value); err != nil {
 			return err
 		}
 	}
