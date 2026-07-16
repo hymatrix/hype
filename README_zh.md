@@ -1,10 +1,10 @@
 # hype
 
-> hymx Node 官方的**脚手架、管理与运行时驱动** CLI。
+> hymx Node 官方的**脚手架与管理** CLI。
 
 [English](README.md) | **中文**
 
-`hype` 带你从一个空目录走到一个运行中的 agent:脚手架生成 hymx 项目、驱动 VMDocker V2 模块工作流(构建 → spawn → export)、以及对接 Openclaw / Claude 运行时——全部通过一个二进制、一个 REPL 或内嵌 Web UI 完成。
+`hype` 带你从一个空目录走到一个运行中的模块:脚手架生成 hymx 项目,再端到端驱动 VMDocker V2 工作流——拉取、构建、spawn、export 基于 profile 的模块——全部通过一个二进制或一个交互式 REPL 完成。
 
 - **第一次用?** 直接看 [快速上手](#快速上手),5 分钟跑通端到端流程。
 - **想查某个命令?** 看 [命令列表](#命令列表) 速查表。
@@ -19,24 +19,22 @@
 4. [vmdocker 使用](#vmdocker-使用)
 5. [命令列表](#命令列表)
 6. [详细使用参数](#详细使用参数)
-7. [Web UI](#web-ui)
-8. [脚手架项目结构](#脚手架项目结构)
-9. [从源码构建与发布](#从源码构建与发布)
-10. [说明](#说明)
+7. [脚手架项目结构](#脚手架项目结构)
+8. [从源码构建与发布](#从源码构建与发布)
+9. [说明](#说明)
 
 ---
 
 ## 概述
 
-**是什么。** `hype`(`github.com/hymatrix/hype`)是 hymx Node 的命令行伴侣。它生成 Go 项目脚手架、管理 VM 模块、端到端驱动 VMDocker V2 运行时,并内置一个 Web UI。
+**是什么。** `hype`(`github.com/hymatrix/hype`)是 hymx Node 的命令行伴侣。它生成 Go 项目脚手架、管理 VM 模块,并端到端驱动 VMDocker V2 运行时。
 
 **能做什么。**
 
 - **项目脚手架** —— 生成 hymx Node 项目并挂载 VM 模块(`new`、`vmm`、`mount`、`module`、`run`、`get`)。
 - **VMDocker V2 工作流** —— 拉取、初始化、构建、spawn、export 基于 profile 的模块(`vmdocker …`)。
-- **运行时驱动** —— 通过 hymx SDK 拉起并对接 Openclaw 与 Claude 运行时(`openclaw …`、`claude …`)。
 - **数据迁移** —— 在 Redis 与 JSONL 之间搬运进程数据(`db-import`、`db-export`)。
-- **交互与 UI** —— 内置 REPL(`repl`)与本地 Web UI(`ui`)。
+- **交互** —— 内置 REPL(`repl`,或直接无参数运行 `hype`)。
 
 **生态位置。** `hype` 是 hymx 栈里最外层的编排器:
 
@@ -47,7 +45,7 @@ hype (CLI / 编排器)
               └── vmdocker-agent   镜像内适配器(PID 1),运行你的运行时
 ```
 
-**怎么运行。** 按需选择:一次性子命令(`hype <cmd>`)、交互式 REPL(无参数运行 `hype`)、或 Web UI(`hype ui`)。
+**怎么运行。** 按需选择:一次性子命令(`hype <cmd>`),或交互式 REPL(无参数运行 `hype`)。
 
 ---
 
@@ -62,7 +60,7 @@ npm install -g @hymx/hype
 # Go 工具链
 go install github.com/hymatrix/hype/cmd/hype@latest   # 或 @v0.1.0
 
-# 从源码构建(详见「从源码构建与发布」)
+# 从源码构建
 make build        # -> build/hype
 ```
 
@@ -221,18 +219,6 @@ hype vmdocker clean --dir ./vmdockerv2
 | `vmdocker export` | 把运行中进程导出成 module id | **`-p/--pid`**、**`-k/--private-key`** |
 | `vmdocker clean` | 停止节点 + 删除生成的运行时文件 | `--dir` |
 
-### 运行时(Runtime)
-
-| 命令 | 作用 | 关键参数 |
-|------|------|----------|
-| `openclaw spawn` | Spawn 一个 Openclaw 进程(可选带 Telegram) | **`-m/--module-id`**、**`-s/--scheduler`**、**`--gateway-token`**、`--model`、`--provider`、`--api-key` |
-| `openclaw conf-tg` | 为进程配置 Telegram | **`-p/--pid`**、**`--bot-token`** |
-| `openclaw pair-tg` | 批准 Telegram 配对 | **`-p/--pid`**、**`-c/--code`** |
-| `openclaw chat` | 向进程发一条 chat 命令 | **`-p/--pid`**、**`-c/--command`** |
-| `claude spawn` | Spawn 一个 Claude 运行时进程 | **`-m/--module-id`**、**`-s/--scheduler`**、**`--api-key`**、`--base-url`、`--model` |
-| `claude chat` | 向 Claude 进程发一条消息 | **`-p/--pid`**、**`-c/--command`** |
-| `claude exec` | 向 Claude 进程发一个通用 prompt | **`--pid`**、**`-p/--prompt`** |
-
 ### 数据(Data)
 
 | 命令 | 作用 | 关键参数 |
@@ -245,7 +231,6 @@ hype vmdocker clean --dir ./vmdockerv2
 | 命令 | 作用 | 关键参数 |
 |------|------|----------|
 | `repl` | 进入交互模式(无参数运行时的默认) | — |
-| `ui` | 启动内嵌 Web UI | `--listen`(`127.0.0.1:7788`)、`--timeout-ms`(`90000`) |
 | `version` | 打印版本信息 | — |
 
 ---
@@ -257,16 +242,14 @@ hype vmdocker clean --dir ./vmdockerv2
 以下约定被多个命令共享:
 
 - **`-u/--node-url`** —— hymx 节点 URL。默认 `http://127.0.0.1:8080`。`vmdocker spawn`/`export` 还会读 `VMDOCKER_URL`。
-- **`-k/--private-key`** —— 签名私钥。运行时命令的回退顺序:`--private-key` → `HYPE_PRIVATE_KEY` → `PRV_KEY` → `VMDOCKER_PRIVATE_KEY`。
-- **`--json`** —— 机器可读输出(`openclaw`、`claude`、`vmdocker spawn`/`export`)。
+- **`-k/--private-key`** —— 签名私钥。回退顺序:`--private-key` → `HYPE_PRIVATE_KEY` → `PRV_KEY` → `VMDOCKER_PRIVATE_KEY`。
+- **`--json`** —— 机器可读输出(`vmdocker spawn`/`export`)。
 
-| 命令组 | 环境变量回退 |
-|--------|--------------|
+| 命令 | 环境变量回退 |
+|------|--------------|
 | `vmdocker spawn` | `VMDOCKER_MODULE_ID`、`VMDOCKER_SCHEDULER`、`RUNTIME_TYPE`、`RUNTIME_BACKEND`、`VMDOCKER_URL`、`VMDOCKER_PRIVATE_KEY`/`HYPE_PRIVATE_KEY`/`PRV_KEY` |
 | `vmdocker export` | `VMDOCKER_EXPORT_PID`、`VMDOCKER_URL`、`VMDOCKER_PRIVATE_KEY`/`HYPE_PRIVATE_KEY`/`PRV_KEY` |
 | `vmdocker module build` | `VMDOCKER_AGENT_BIN`、`VMDOCKER_URL`,以及上面的私钥链(也读检出目录的 `.env`) |
-| `claude spawn` | `VMDOCKER_MODULE_ID`、`VMDOCKER_SCHEDULER`、`RUNTIME_BACKEND`、`ANTHROPIC_API_KEY`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`/`CLAUDE_MODEL`、`CLAUDE_CODE_FLAGS` |
-| `ui` | `OPENCLAW_WEBUI_LISTEN`、`OPENCLAW_WEBUI_TIMEOUT_MS` |
 
 ### 脚手架命令
 
@@ -394,69 +377,6 @@ hype vmdocker spawn \
 
 - `--dir` —— VMDocker V2 检出。默认 `./vmdockerv2`。
 
-### 运行时命令
-
-`openclaw` 和 `claude` 都共享持久 flag:`-u/--node-url`(默认 `http://127.0.0.1:8080`)、`-k/--private-key`、`--json`。
-
-#### `openclaw spawn`
-用 module + scheduler + spawn tag 创建一个 Openclaw 进程。
-
-- **`-m/--module-id`**、**`-s/--scheduler`**、**`--gateway-token`**(均必填)。
-- `--model`、`--provider`、`--api-key` —— 模型选择。`model=opencode-go/kimi-k2.5` 且 `--provider` 为空,等价于 `--model kimi-k2.5 --provider opencode-go`。若设了 `--api-key` 而 `--model` 无 provider 前缀,则 `--provider` 必填。
-- `--runtime-backend` —— `docker` 或 `sandbox`。省略时 `vmdocker` 按操作系统选择(macOS → `sandbox`,Linux → `docker`)。
-- `--bot-token`、`--default-account`(`main`)、`--dm-policy`(`open`)、`--allow-from`(`*`)—— 若带 `--bot-token`,`hype` 会立即对新 pid 执行 `ConfigureTelegram`。
-
-```bash
-./build/hype openclaw spawn \
-  --module-id <moduleId> --scheduler <scheduler> \
-  --model kimi-k2.5 --provider opencode-go --api-key <providerApiKey> \
-  --gateway-token openclaw-test-token --runtime-backend sandbox \
-  --bot-token <telegramBotToken> --default-account main --dm-policy open --allow-from '*' \
-  --private-key <privateKey>
-```
-
-#### `openclaw conf-tg`
-为已存在的进程配置 Telegram(`ConfigureTelegram`)。
-
-- **`-p/--pid`**、**`--bot-token`**(必填)。
-- `--default-account`(`main`)、`--dm-policy`(`pairing`)、`--allow-from`(`*`)。`dm-policy=open` 要求 `--allow-from` 含 `*`。
-
-#### `openclaw pair-tg`
-批准一次 Telegram 配对(`ApproveTelegramPairing`)。
-
-- **`-p/--pid`**、**`-c/--code`**(必填)。
-- `--channel`(`telegram`)、`--dm-policy`(`pairing`)。
-
-#### `openclaw chat`
-向进程发一条 chat 命令(`Chat`)。
-
-- **`-p/--pid`**、**`-c/--command`**(必填)。
-
-#### `claude spawn`
-创建一个 Claude 运行时进程。env/tag 布局对齐 `vmdocker-agent` 里的 Claude 运行时;spawn 固定设置 `Container-Env-RUNTIME_TYPE=claude`。
-
-- **`-m/--module-id`**、**`-s/--scheduler`**、**`--api-key`**(必填)。
-- `--base-url`、`--model`、`--code-flags`、`--runtime-backend`(可选)。
-
-```bash
-./build/hype claude spawn \
-  --module-id <moduleId> --scheduler <scheduler> \
-  --api-key <anthropicApiKey> --base-url <anthropicBaseURL> --model <anthropicModel> \
-  --runtime-backend sandbox --private-key <privateKey>
-```
-
-#### `claude chat` / `claude exec`
-`chat` 发送 `Action=Chat`;`exec` 发送 `Action=Execute`。`hype claude -p "..." --pid <pid>` 是 `hype claude exec --pid <pid> -p "..."` 的快捷方式。
-
-- `chat`:**`-p/--pid`**、**`-c/--command`**(必填)。
-- `exec`:**`--pid`**、**`-p/--prompt`**(必填)。
-
-```bash
-./build/hype claude exec --pid <pid> --prompt "你好，请介绍一下自己" --private-key <privateKey>
-```
-
-完整的 Claude 命令指南见 [`tools/claude/README.md`](tools/claude/README.md)。
-
 ### 数据命令
 
 #### `db-import`
@@ -486,7 +406,7 @@ hype db-export --redis-url redis://@localhost:6379/0 --out ./exports   # 全部�
 ### 交互与其他
 
 #### REPL
-用 `hype`(无参数)或 `hype repl` 启动。用 `HYPE_PRIVATE_KEY=0x... hype` 预置运行时命令的私钥。
+用 `hype`(无参数)或 `hype repl` 启动。用 `HYPE_PRIVATE_KEY=0x... hype` 预置联网命令的私钥。
 
 - 直接输入子命令,无需 `hype` 前缀——如 `version`、`new -m ...`、`db-export ...`。
 - 漏掉的必填 flag 会被逐个交互式提示。
@@ -495,38 +415,6 @@ hype db-export --redis-url redis://@localhost:6379/0 --out ./exports   # 全部�
 
 #### `version`
 打印版本信息(`hype version`、`hype --version` 或 `hype -v`),包含 hype 版本、内嵌的 hymx 节点版本,以及 Go 构建细节。
-
----
-
-## Web UI
-
-内嵌在 `hype` 二进制中、面向 `openclaw`、`claude`、`vmdocker` 命令的本地 Web UI。
-
-```bash
-hype ui
-# Openclaw UI listening on http://127.0.0.1:7788
-```
-
-- 仅本地的 API server(`127.0.0.1:7788`);它执行当前的 `hype` 二进制来跑 `openclaw`、`claude`、`vmdocker` 子命令。
-- 展示结构化 JSON 与原始 stdout/stderr;在命令预览中对敏感字段打码。
-- 密钥只保存在内存中(不做 `localStorage` 持久化)。
-- 在内存中导入本地 `.env`(文件选择器或路径),预填匹配的 Openclaw 字段(`moduleId`、来自 `VMDOCKER_SCHEDULER` 的 `scheduler`、`model`、`provider`、`apiKey`、Telegram 设置),并用于 `vmdocker init`。`View Env` 展示每一条导入的条目。
-
-**flag 与环境变量:**
-
-- `--listen` —— 默认 `127.0.0.1:7788`(环境变量 `OPENCLAW_WEBUI_LISTEN`)。
-- `--timeout-ms` —— 默认 `90000`(环境变量 `OPENCLAW_WEBUI_TIMEOUT_MS`)。
-- 若 UI 的 privateKey 字段为空,会使用 `HYPE_PRIVATE_KEY` 或 `PRV_KEY`。
-
-**相对路径**从启动 `hype ui` 的工作目录解析。从 `build/` 启动(`cd build && ./hype ui`)会把 `./.env` 和 `./vmdocker` 解析到 `build/` 下;从仓库根启动(`./build/hype ui`)则解析到根目录下。
-
-开发模式(Vite 在 `http://127.0.0.1:5173`,API 在 `http://127.0.0.1:7788`):
-
-```bash
-./frontend/scripts/dev.sh
-```
-
-更多细节:[`frontend/README.md`](frontend/README.md)。
 
 ---
 
@@ -570,19 +458,14 @@ go build -o ./<pkg> ./cmd
 ### 构建
 
 ```bash
-# 用 make
-make build            # -> build/hype
-
-# 直接用 go(先构建前端资产——它们会被内嵌)
-npm --prefix ./frontend ci
-npm --prefix ./frontend run build
+make build                        # -> build/hype
+# 或直接用 go:
 go build -o build/hype ./cmd/hype
 ```
 
 ### 从源码安装
 
 ```bash
-npm --prefix ./frontend ci && npm --prefix ./frontend run build
 go install ./cmd/hype     # 或:make install
 ```
 
@@ -598,5 +481,3 @@ go install ./cmd/hype     # 或:make install
 
 - **`hype get` 与 `vmdocker get` 是不同命令**:`hype get` 通过 go 工具链拉取一个 VMM 包;`vmdocker get` 是 clone VMDocker V2 仓库并构建节点。
 - `hype` 从不把 module id 或 process id 写进 `.env`。
-- **已知限制:** 内嵌 Web UI 的 VMDocker Get 动作仍会发出已移除的 `--version` flag,不属于纯 CLI 的 V2 工作流。
-- Claude 命令指南:[`tools/claude/README.md`](tools/claude/README.md)。

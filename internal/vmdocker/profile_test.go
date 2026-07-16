@@ -25,7 +25,6 @@ func TestInitProfileCreatesTestagentScaffold(t *testing.T) {
 		`FROM = "registry.example/base:1"`,
 		`tools = []`,
 		`RUN = []`,
-		`# CMD = ["openclaw", "gateway", "--serve"]`,
 		`public = ["~/skills/*", "~/persona/*", "~/.hermes/plugin/*"]`,
 		`# Declarative recipe for a vmdockerv2 agent module.`,
 	} {

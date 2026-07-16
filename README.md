@@ -1,10 +1,10 @@
 # hype
 
-> The official scaffolding, management, and runtime-driver CLI for the **hymx** Node.
+> The official scaffolding and management CLI for the **hymx** Node.
 
 **English** | [中文](README_zh.md)
 
-`hype` gets you from an empty directory to a running agent: scaffold a hymx project, drive the VMDocker V2 module workflow (build → spawn → export), and talk to Openclaw / Claude runtimes — all from one binary, a REPL, or an embedded Web UI.
+`hype` gets you from an empty directory to a running module: scaffold a hymx project, then drive the VMDocker V2 workflow end to end — fetch, build, spawn, and export profile-based modules — from one binary or an interactive REPL.
 
 - **New here?** Jump to [Quick Start](#quick-start) for a 5‑minute end-to-end run.
 - **Looking for a command?** See the [Command Reference](#command-reference) cheat sheet.
@@ -19,24 +19,22 @@
 4. [vmdocker Usage](#vmdocker-usage)
 5. [Command Reference](#command-reference)
 6. [Command Details](#command-details)
-7. [Web UI](#web-ui)
-8. [Scaffolded Project Layout](#scaffolded-project-layout)
-9. [Build from Source & Release](#build-from-source--release)
-10. [Notes](#notes)
+7. [Scaffolded Project Layout](#scaffolded-project-layout)
+8. [Build from Source & Release](#build-from-source--release)
+9. [Notes](#notes)
 
 ---
 
 ## Overview
 
-**What it is.** `hype` (`github.com/hymatrix/hype`) is the command-line companion for the hymx Node. It scaffolds Go projects, manages VM modules, drives the VMDocker V2 runtime end to end, and ships an embedded Web UI.
+**What it is.** `hype` (`github.com/hymatrix/hype`) is the command-line companion for the hymx Node. It scaffolds Go projects, manages VM modules, and drives the VMDocker V2 runtime end to end.
 
 **What it does.**
 
 - **Project scaffolding** — generate a hymx Node project and mount VM modules (`new`, `vmm`, `mount`, `module`, `run`, `get`).
 - **VMDocker V2 workflow** — fetch, initialize, build, spawn, and export profile-based modules (`vmdocker …`).
-- **Runtime drivers** — spawn and talk to Openclaw and Claude runtimes over the hymx SDK (`openclaw …`, `claude …`).
 - **Data migration** — move process data between Redis and JSONL (`db-import`, `db-export`).
-- **Interactive & UI** — a built-in REPL (`repl`) and a local Web UI (`ui`).
+- **Interactive** — a built-in REPL (`repl`, or just run `hype` with no args).
 
 **Where it sits.** `hype` is the outermost orchestrator in the hymx stack:
 
@@ -47,7 +45,7 @@ hype (CLI / orchestrator)
               └── vmdocker-agent   in-image adapter (PID 1) that runs your runtime
 ```
 
-**How you run it.** Pick whichever fits: one-shot subcommands (`hype <cmd>`), the interactive REPL (`hype` with no args), or the Web UI (`hype ui`).
+**How you run it.** Pick whichever fits: one-shot subcommands (`hype <cmd>`), or the interactive REPL (`hype` with no args).
 
 ---
 
@@ -62,7 +60,7 @@ npm install -g @hymx/hype
 # Go toolchain
 go install github.com/hymatrix/hype/cmd/hype@latest   # or @v0.1.0
 
-# From source (see "Build from Source" for details)
+# From source
 make build        # -> build/hype
 ```
 
@@ -221,18 +219,6 @@ Run `hype <command> --help` for the authoritative, up-to-date flags. Required fl
 | `vmdocker export` | Export a running process into a module ID | **`-p/--pid`**, **`-k/--private-key`** |
 | `vmdocker clean` | Stop node + remove generated runtime files | `--dir` |
 
-### Runtime
-
-| Command | What it does | Key flags |
-|---------|--------------|-----------|
-| `openclaw spawn` | Spawn an Openclaw process (+ optional Telegram) | **`-m/--module-id`**, **`-s/--scheduler`**, **`--gateway-token`**, `--model`, `--provider`, `--api-key` |
-| `openclaw conf-tg` | Configure Telegram for a process | **`-p/--pid`**, **`--bot-token`** |
-| `openclaw pair-tg` | Approve Telegram pairing | **`-p/--pid`**, **`-c/--code`** |
-| `openclaw chat` | Send a chat command to a process | **`-p/--pid`**, **`-c/--command`** |
-| `claude spawn` | Spawn a Claude runtime process | **`-m/--module-id`**, **`-s/--scheduler`**, **`--api-key`**, `--base-url`, `--model` |
-| `claude chat` | Send a chat message to a Claude process | **`-p/--pid`**, **`-c/--command`** |
-| `claude exec` | Send a generic prompt to a Claude process | **`--pid`**, **`-p/--prompt`** |
-
 ### Data
 
 | Command | What it does | Key flags |
@@ -245,7 +231,6 @@ Run `hype <command> --help` for the authoritative, up-to-date flags. Required fl
 | Command | What it does | Key flags |
 |---------|--------------|-----------|
 | `repl` | Start interactive mode (also the default with no args) | — |
-| `ui` | Start the embedded Web UI | `--listen` (`127.0.0.1:7788`), `--timeout-ms` (`90000`) |
 | `version` | Print version information | — |
 
 ---
@@ -257,16 +242,14 @@ Run `hype <command> --help` for the authoritative, up-to-date flags. Required fl
 Several commands share these conventions:
 
 - **`-u/--node-url`** — hymx node URL. Default `http://127.0.0.1:8080`. `vmdocker spawn`/`export` also read `VMDOCKER_URL`.
-- **`-k/--private-key`** — signing key. Fallback order for runtime commands: `--private-key` → `HYPE_PRIVATE_KEY` → `PRV_KEY` → `VMDOCKER_PRIVATE_KEY`.
-- **`--json`** — machine-readable output (`openclaw`, `claude`, `vmdocker spawn`/`export`).
+- **`-k/--private-key`** — signing key. Fallback order: `--private-key` → `HYPE_PRIVATE_KEY` → `PRV_KEY` → `VMDOCKER_PRIVATE_KEY`.
+- **`--json`** — machine-readable output (`vmdocker spawn`/`export`).
 
-| Command group | Env fallbacks |
-|---------------|---------------|
+| Command | Env fallbacks |
+|---------|---------------|
 | `vmdocker spawn` | `VMDOCKER_MODULE_ID`, `VMDOCKER_SCHEDULER`, `RUNTIME_TYPE`, `RUNTIME_BACKEND`, `VMDOCKER_URL`, `VMDOCKER_PRIVATE_KEY`/`HYPE_PRIVATE_KEY`/`PRV_KEY` |
 | `vmdocker export` | `VMDOCKER_EXPORT_PID`, `VMDOCKER_URL`, `VMDOCKER_PRIVATE_KEY`/`HYPE_PRIVATE_KEY`/`PRV_KEY` |
 | `vmdocker module build` | `VMDOCKER_AGENT_BIN`, `VMDOCKER_URL`, and the private-key chain above (also checkout `.env`) |
-| `claude spawn` | `VMDOCKER_MODULE_ID`, `VMDOCKER_SCHEDULER`, `RUNTIME_BACKEND`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`/`CLAUDE_MODEL`, `CLAUDE_CODE_FLAGS` |
-| `ui` | `OPENCLAW_WEBUI_LISTEN`, `OPENCLAW_WEBUI_TIMEOUT_MS` |
 
 ### Scaffolding commands
 
@@ -394,69 +377,6 @@ Stop the local node process recorded by `cmd/hymx-*.lock`, remove `cmd/hymx-*.lo
 
 - `--dir` — VMDocker V2 checkout. Default `./vmdockerv2`.
 
-### Runtime commands
-
-Both `openclaw` and `claude` share persistent flags `-u/--node-url` (default `http://127.0.0.1:8080`), `-k/--private-key`, and `--json`.
-
-#### `openclaw spawn`
-Create an Openclaw process using module + scheduler + spawn tags.
-
-- **`-m/--module-id`**, **`-s/--scheduler`**, **`--gateway-token`** (all required).
-- `--model`, `--provider`, `--api-key` — model selection. `model=opencode-go/kimi-k2.5` with empty `--provider` is treated the same as `--model kimi-k2.5 --provider opencode-go`. If `--api-key` is set and `--model` has no provider prefix, `--provider` is required.
-- `--runtime-backend` — `docker` or `sandbox`. If omitted, `vmdocker` picks by OS (macOS → `sandbox`, Linux → `docker`).
-- `--bot-token`, `--default-account` (`main`), `--dm-policy` (`open`), `--allow-from` (`*`) — if `--bot-token` is present, `hype` immediately runs `ConfigureTelegram` on the new pid.
-
-```bash
-./build/hype openclaw spawn \
-  --module-id <moduleId> --scheduler <scheduler> \
-  --model kimi-k2.5 --provider opencode-go --api-key <providerApiKey> \
-  --gateway-token openclaw-test-token --runtime-backend sandbox \
-  --bot-token <telegramBotToken> --default-account main --dm-policy open --allow-from '*' \
-  --private-key <privateKey>
-```
-
-#### `openclaw conf-tg`
-Configure Telegram for an existing process (`ConfigureTelegram`).
-
-- **`-p/--pid`**, **`--bot-token`** (required).
-- `--default-account` (`main`), `--dm-policy` (`pairing`), `--allow-from` (`*`). `dm-policy=open` requires `--allow-from` to include `*`.
-
-#### `openclaw pair-tg`
-Approve a Telegram pairing (`ApproveTelegramPairing`).
-
-- **`-p/--pid`**, **`-c/--code`** (required).
-- `--channel` (`telegram`), `--dm-policy` (`pairing`).
-
-#### `openclaw chat`
-Send a chat command to a process (`Chat`).
-
-- **`-p/--pid`**, **`-c/--command`** (required).
-
-#### `claude spawn`
-Create a Claude runtime process. Env/tag layout is aligned with the Claude runtime in `vmdocker-agent`; spawn always sets `Container-Env-RUNTIME_TYPE=claude`.
-
-- **`-m/--module-id`**, **`-s/--scheduler`**, **`--api-key`** (required).
-- `--base-url`, `--model`, `--code-flags`, `--runtime-backend` (optional).
-
-```bash
-./build/hype claude spawn \
-  --module-id <moduleId> --scheduler <scheduler> \
-  --api-key <anthropicApiKey> --base-url <anthropicBaseURL> --model <anthropicModel> \
-  --runtime-backend sandbox --private-key <privateKey>
-```
-
-#### `claude chat` / `claude exec`
-`chat` sends `Action=Chat`; `exec` sends `Action=Execute`. `hype claude -p "..." --pid <pid>` is a shortcut for `hype claude exec --pid <pid> -p "..."`.
-
-- `chat`: **`-p/--pid`**, **`-c/--command`** (required).
-- `exec`: **`--pid`**, **`-p/--prompt`** (required).
-
-```bash
-./build/hype claude exec --pid <pid> --prompt "Hello, please introduce yourself" --private-key <privateKey>
-```
-
-See [`tools/claude/README.md`](tools/claude/README.md) for the full Claude command guide.
-
 ### Data commands
 
 #### `db-import`
@@ -486,7 +406,7 @@ hype db-export --redis-url redis://@localhost:6379/0 --out ./exports   # all pro
 ### Interactive & other
 
 #### REPL
-Start with `hype` (no args) or `hype repl`. Preset a key for runtime commands with `HYPE_PRIVATE_KEY=0x... hype`.
+Start with `hype` (no args) or `hype repl`. Preset a key for networked commands with `HYPE_PRIVATE_KEY=0x... hype`.
 
 - Type subcommands directly, without the `hype` prefix — e.g. `version`, `new -m ...`, `db-export ...`.
 - Omitted required flags are prompted for interactively (one by one).
@@ -495,38 +415,6 @@ Start with `hype` (no args) or `hype repl`. Preset a key for runtime commands wi
 
 #### `version`
 Print version information (`hype version`, `hype --version`, or `hype -v`), including the hype version, embedded hymx node version, and Go build details.
-
----
-
-## Web UI
-
-A local Web UI embedded in the `hype` binary for the `openclaw`, `claude`, and `vmdocker` commands.
-
-```bash
-hype ui
-# Openclaw UI listening on http://127.0.0.1:7788
-```
-
-- Local-only API server (`127.0.0.1:7788`); it executes the current `hype` binary for `openclaw`, `claude`, and `vmdocker` subcommands.
-- Displays structured JSON and raw stdout/stderr; masks sensitive fields in the command preview.
-- Keeps secrets in memory only (no `localStorage` persistence).
-- Imports a local `.env` in memory (file picker or path), prefills matching Openclaw fields (`moduleId`, `scheduler` from `VMDOCKER_SCHEDULER`, `model`, `provider`, `apiKey`, Telegram settings), and uses it for `vmdocker init`. `View Env` shows every imported entry.
-
-**Flags & environment:**
-
-- `--listen` — default `127.0.0.1:7788` (env `OPENCLAW_WEBUI_LISTEN`).
-- `--timeout-ms` — default `90000` (env `OPENCLAW_WEBUI_TIMEOUT_MS`).
-- `HYPE_PRIVATE_KEY` or `PRV_KEY` are used if the UI privateKey field is empty.
-
-**Relative paths** resolve from the working directory used to start `hype ui`. Starting from `build/` (`cd build && ./hype ui`) resolves `./.env` and `./vmdocker` under `build/`; starting from the repo root (`./build/hype ui`) resolves them under the root.
-
-For development (Vite on `http://127.0.0.1:5173`, API on `http://127.0.0.1:7788`):
-
-```bash
-./frontend/scripts/dev.sh
-```
-
-More details: [`frontend/README.md`](frontend/README.md).
 
 ---
 
@@ -570,19 +458,14 @@ Scaffold dependencies (e.g. `github.com/spf13/viper`, `github.com/urfave/cli/v2`
 ### Build
 
 ```bash
-# With make
-make build            # -> build/hype
-
-# With go directly (build frontend assets first — they are embedded)
-npm --prefix ./frontend ci
-npm --prefix ./frontend run build
+make build                        # -> build/hype
+# or with go directly:
 go build -o build/hype ./cmd/hype
 ```
 
 ### Install from source
 
 ```bash
-npm --prefix ./frontend ci && npm --prefix ./frontend run build
 go install ./cmd/hype     # or: make install
 ```
 
@@ -598,5 +481,3 @@ go install ./cmd/hype     # or: make install
 
 - **`hype get` vs `vmdocker get`** are different commands: `hype get` pulls a VMM package via go tooling; `vmdocker get` clones the VMDocker V2 repo and builds a node.
 - `hype` never writes module IDs or process IDs into `.env`.
-- **Known limitation:** the embedded Web UI's VMDocker Get action still emits the removed `--version` flag and is not part of the CLI-only V2 workflow.
-- Claude command guide: [`tools/claude/README.md`](tools/claude/README.md).
