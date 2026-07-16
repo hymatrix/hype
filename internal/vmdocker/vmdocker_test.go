@@ -88,7 +88,7 @@ func TestParseEnvFile(t *testing.T) {
 	content := strings.Join([]string{
 		"# comment",
 		`VMDOCKER_PRIVATE_KEY="0xabc"`,
-		"OPENCLAW_PROVIDER=zen",
+		"EXAMPLE_PROVIDER=zen",
 		"INVALID_LINE",
 		"",
 	}, "\n")
@@ -103,7 +103,7 @@ func TestParseEnvFile(t *testing.T) {
 	if values["VMDOCKER_PRIVATE_KEY"] != "0xabc" {
 		t.Fatalf("expected private key to be parsed, got %#v", values)
 	}
-	if values["OPENCLAW_PROVIDER"] != "zen" {
+	if values["EXAMPLE_PROVIDER"] != "zen" {
 		t.Fatalf("expected provider to be parsed, got %#v", values)
 	}
 }
@@ -112,7 +112,7 @@ func TestParseEnvContent(t *testing.T) {
 	values, err := ParseEnvContent(strings.Join([]string{
 		"# comment",
 		"VMDOCKER_PRIVATE_KEY='0xdef'",
-		"OPENCLAW_MODEL=plan",
+		"EXAMPLE_MODEL=plan",
 	}, "\n"))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -120,7 +120,7 @@ func TestParseEnvContent(t *testing.T) {
 	if values["VMDOCKER_PRIVATE_KEY"] != "0xdef" {
 		t.Fatalf("expected private key to be parsed, got %#v", values)
 	}
-	if values["OPENCLAW_MODEL"] != "plan" {
+	if values["EXAMPLE_MODEL"] != "plan" {
 		t.Fatalf("expected model to be parsed, got %#v", values)
 	}
 }
@@ -215,7 +215,7 @@ func TestInitRequiresPrivateKeyInEnvFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	envFile := filepath.Join(dir, "local.env")
-	if err := os.WriteFile(envFile, []byte("OPENCLAW_PROVIDER=zen\n"), 0o644); err != nil {
+	if err := os.WriteFile(envFile, []byte("EXAMPLE_PROVIDER=zen\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	manager := &Manager{

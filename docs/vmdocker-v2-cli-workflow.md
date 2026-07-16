@@ -186,4 +186,3 @@ It does not remove:
 
 - There is no `respawn` command. Use `export`, then `spawn` with the returned module ID.
 - Hype never writes module IDs or process IDs into `.env`.
-- The embedded Web UI VMDocker Get action still uses the removed `--version` flag and is not part of this CLI-only V2 migration.

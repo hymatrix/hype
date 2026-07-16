@@ -8,7 +8,18 @@ import (
 	"os"
 	"strings"
 
+	"github.com/everFinance/goether"
+	"github.com/hymatrix/hymx/sdk"
+	"github.com/permadao/goar"
 	"github.com/spf13/cobra"
+)
+
+const (
+	containerEnvTagPrefix = "Container-Env-"
+	maxIDChars            = 256
+
+	runtimeBackendDocker  = "docker"
+	runtimeBackendSandbox = "sandbox"
 )
 
 func firstNonEmptyEnv(keys ...string) string {
@@ -43,7 +54,7 @@ func validateRuntimeBackend(value string) error {
 	}
 
 	switch value {
-	case openclawRuntimeDocker, openclawRuntimeSandbox:
+	case runtimeBackendDocker, runtimeBackendSandbox:
 		return nil
 	default:
 		return errors.New("runtime-backend must be one of \"docker\" or \"sandbox\"")
@@ -61,4 +72,16 @@ func writeRuntimeResult(out io.Writer, jsonOut bool, payload map[string]interfac
 	}
 	_, err = fmt.Fprintln(out, string(b))
 	return err
+}
+
+func newSDK(nodeURL, privateKey string) (*sdk.SDK, error) {
+	signer, err := goether.NewSigner(privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("newSDK: init signer failed: %w", err)
+	}
+	bundler, err := goar.NewBundler(signer)
+	if err != nil {
+		return nil, fmt.Errorf("newSDK: init bundler failed: %w", err)
+	}
+	return sdk.NewFromBundler(nodeURL, bundler), nil
 }

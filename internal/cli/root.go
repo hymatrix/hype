@@ -31,9 +31,6 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newDBImportCmd())
 	rootCmd.AddCommand(newExportJSONLCmd())
 	rootCmd.AddCommand(newReplCmd())
-	rootCmd.AddCommand(newOpenclawCmd())
-	rootCmd.AddCommand(newClaudeCmd())
-	rootCmd.AddCommand(newOpenclawUICmd())
 	rootCmd.AddCommand(newVersionCmd())
 
 	rootCmd.SetVersionTemplate(versionBanner())

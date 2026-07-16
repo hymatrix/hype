@@ -35,8 +35,6 @@ tools = []
 # Optional Dockerfile RUN bodies. Values do not include the leading "RUN ".
 RUN = []
 
-# CMD = ["openclaw", "gateway", "--serve"]
-
 [vmdocker]
 # Export allowlist relative to HOME. Export preserves these paths, and spawn
 # overlays them into a fresh workspace.
